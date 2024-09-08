@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TileMap Studio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #app {
+            display: flex;
+            height: 100vh;
+        }
+        #toolbox {
+            width: 60px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #main-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .tool-button {
+            margin-bottom: 10px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .tool-button.active {
+            background-color: #e0e0e0;
+        }
+        #layer-panel {
+            width: 250px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .layer {
+            margin-bottom: 5px;
+            padding: 5px;
+            background-color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .active-layer {
+            background-color: #e0e0e0;
+        }
+        .layer-name {
+            flex-grow: 1;
+        }
+        .layer-visibility, .layer-lock {
+            cursor: pointer;
+        }
+        #sprite-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        .sprite-item {
+            display: inline-block;
+            margin: 5px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .sprite-item:hover {
+            transform: scale(1.1);
+        }
+        #spritesheet-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 1px solid black;
+            z-index: 1000;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        .context-menu {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 5px 0;
+            z-index: 1000;
+        }
+        .context-menu-item {
+            padding: 5px 20px;
+            cursor: pointer;
+        }
+        .context-menu-item:hover {
+            background-color: #f0f0f0;
+        }
+        #spritesheet-container {
+            position: relative;
+            overflow: hidden;
+            max-width: 100%;
+            max-height: 70vh;
+        }
+        #spritesheet-img {
+            max-width: none;
+            max-height: none;
+        }
+        #torch-btn {
+            color: #FF4500;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="toolbox">
+            <i class="material-icons tool-button" title="Select Tool" data-tool="select">pan_tool_alt</i>
+            <i class="material-icons tool-button" title="Move Tool" data-tool="move">pan_tool</i>
+            <i class="material-icons tool-button" title="Marquee Tool" data-tool="marquee">crop_square</i>
+            <i class="material-icons tool-button" title="Brush Tool" data-tool="brush">brush</i>
+            <i class="material-icons tool-button" title="Eraser Tool" data-tool="eraser">remove_circle_outline</i>
+            <i class="material-icons tool-button" title="Fill Tool" data-tool="fill">format_color_fill</i>
+            <i class="material-icons tool-button" title="Text Tool" data-tool="text">text_fields</i>
+            <i class="material-icons tool-button" title="Eyedropper Tool" data-tool="eyedropper">colorize</i>
+            <i class="material-icons tool-button" title="Zoom Tool" data-tool="zoom">zoom_in</i>
+            <i class="material-icons tool-button" title="Hand Tool" data-tool="hand">pan_tool</i>
+            <i class="material-icons tool-button" title="Torch Tool" data-tool="torch" id="torch-btn">whatshot</i>
+            <i class="material-icons tool-button" title="Settings" id="settings-btn">settings</i>
+            <i class="material-icons tool-button" title="Help" id="help-btn">help_outline</i>
+        </div>
+        <div id="canvas-container">
+            <canvas id="main-canvas"></canvas>
+        </div>
+        <div id="layer-panel">
+            <button class="btn waves-effect waves-light" id="spritesheet-btn">Load Spritesheet</button>
+            <div id="sprite-list"></div>
+            <h6>Layers</h6>
+            <div id="layer-list"></div>
+            <button class="btn waves-effect waves-light" id="save-tilesheet-btn">Save Sliced Tilesheet</button>
+            <button class="btn waves-effect waves-light" id="load-tilesheet-btn">Load Sliced Tilesheet</button>
+            <button class="btn waves-effect waves-light" id="add-layer-btn">Add Layer</button>
+            <button class="btn waves-effect waves-light" id="save-btn">Save</button>
+            <button class="btn waves-effect waves-light" id="load-btn">Load</button>
+            
+        </div>
+    </div>
+
+    <div id="spritesheet-dialog">
+        <div id="spritesheet-container">
+            <img id="spritesheet-img">
+            <canvas id="spritesheet-grid"></canvas>
+        </div>
+        <div>
+            <label for="sprite-width">Sprite Width:</label>
+            <input type="number" id="sprite-width" min="1" value="32">
+            <label for="sprite-height">Sprite Height:</label>
+            <input type="number" id="sprite-height" min="1" value="32">
+        </div>
+        <div>
+            <label for="grid-offset-x">Grid Offset X:</label>
+            <input type="number" id="grid-offset-x" value="0">
+            <label for="grid-offset-y">Grid Offset Y:</label>
+            <input type="number" id="grid-offset-y" value="0">
+        </div>
+        <button id="spritesheet-ok" class="btn waves-effect waves-light">OK</button>
+    </div>
+
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <h4>TileMap Studio Help</h4>
+            <p>Welcome to TileMap Studio! Here's a quick guide to get you started:</p>
+            <ul>
+                <li><strong>Select Tool:</strong> Click to select and move tiles on the canvas.</li>
+                <li><strong>Move Tool:</strong> Click and drag to move the canvas view.</li>
+                <li><strong>Marquee Tool:</strong> Click and drag to select multiple tiles.</li>
+                <li><strong>Brush Tool:</strong> Click and drag to paint with the selected sprite.</li>
+                <li><strong>Eraser Tool:</strong> Click and drag to remove tiles.</li>
+                <li><strong>Fill Tool:</strong> Click to fill an area with the selected sprite.</li>
+                <li><strong>Text Tool:</strong> Click to add text to the canvas.</li>
+                <li><strong>Eyedropper Tool:</strong> Click to select a tile on the canvas.</li>
+                <li><strong>Zoom Tool:</strong> Click to zoom in, right-click to zoom out.</li>
+                <li><strong>Hand Tool:</strong> Click and drag to pan the canvas view.</li>
+                <li><strong>Torch Tool:</strong> Click to place a light source on the map.</li>
+                <li><strong>Settings:</strong> Adjust grid size and other options.</li>
+                <li><strong>Load Spritesheet:</strong> Import a spritesheet to use for tiles.</li>
+                <li><strong>Layers:</strong> Manage different layers of your map.</li>
+                <li><strong>Save/Load:</strong> Save your work or load a previous project.</li>
+            </ul>
+            <p>Double-click on a tile to open the context menu for additional options.</p>
+        </div>
+        <div class="modal-footer">
+            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('main-canvas');
+            const ctx = canvas.getContext('2d');
+            const layerList = document.getElementById('layer-list');
+            const spriteList = document.getElementById('sprite-list');
+            let layers = [
+                { name: 'Fog', color: 'grey', visible: true, locked: false, items: [] },
+                { name: 'Assets', color: 'yellow', visible: true, locked: false, items: [] },
+                { name: 'Tiles', color: 'black', visible: true, locked: false, items: [] },
+                { name: 'Background', color: 'green', visible: true, locked: false, items: [] },
+                { name: 'Blueprints', color: 'blue', visible: true, locked: false, items: [] }
+            ];
+            let activeLayerIndex = 2;
+            let activeTool = 'select';
+            let gridSize = 32;
+            let zoomLevel = 1;
+            let panOffset = { x: 0, y: 0 };
+            let sprites = [];
+            let activeSprite = null;
+            let selectedTile = null;
+            let isDragging = false;
+            let lastX, lastY;
+            let spritesheetZoom = 1;
+            let spritesheetPan = { x: 0, y: 0 };
+            let gridOffset = { x: 0, y: 0 };
+            let lightSources = [];
+            let JSZip; // We'll load this dynamically
+
+            function resizeCanvas() {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+                redrawCanvas();
+            }
+
+            function redrawCanvas() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.translate(panOffset.x, panOffset.y);
+                ctx.scale(zoomLevel, zoomLevel);
+                drawGrid();
+                layers.forEach((layer, index) => {
+                    if (layer.visible) {
+                        layer.items.forEach(item => {
+                            ctx.drawImage(item.image, item.x, item.y);
+                            if (item === selectedTile) {
+                                ctx.strokeStyle = 'red';
+                                ctx.lineWidth = 2 / zoomLevel;
+                                ctx.strokeRect(item.x, item.y, item.image.width, item.image.height);
+                            }
+                        });
+                    }
+                });
+                drawLighting();
+                ctx.restore();
+            }
+
+            function drawGrid() {
+                ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+                ctx.lineWidth = 1 / zoomLevel;
+                const startX = Math.floor(-panOffset.x / zoomLevel / gridSize) * gridSize;
+                const startY = Math.floor(-panOffset.y / zoomLevel / gridSize) * gridSize;
+                const endX = startX + canvas.width / zoomLevel + gridSize;
+                const endY = startY + canvas.height / zoomLevel + gridSize;
+
+                for (let x = startX; x < endX; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, startY);
+                    ctx.lineTo(x, endY);
+                    ctx.stroke();
+                }
+                for (let y = startY; y < endY; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(startX, y);
+                    ctx.lineTo(endX, y);
+                    ctx.stroke();
+                }
+            }
+
+            function drawLighting() {
+                const fogLayer = layers.find(layer => layer.name === 'Fog');
+                if (!fogLayer || !fogLayer.visible) return;
+
+                const fogCanvas = document.createElement('canvas');
+                fogCanvas.width = canvas.width / zoomLevel;
+                fogCanvas.height = canvas.height / zoomLevel;
+                const fogCtx = fogCanvas.getContext('2d');
+
+                // Fill with almost black color
+                fogCtx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+                fogCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
+
+                lightSources.forEach(light => {
+                    const radius = 10 * gridSize;
+                    const gradient = fogCtx.createRadialGradient(light.x, light.y, 0, light.x, light.y, radius);
+                    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                    fogCtx.globalCompositeOperation = 'destination-out';
+                    fogCtx.fillStyle = gradient;
+                    fogCtx.beginPath();
+                    fogCtx.arc(light.x, light.y, radius, 0, Math.PI * 2);
+                    fogCtx.fill();
+
+                    // Cast shadows
+                    for (let angle = 0; angle < Math.PI * 2; angle += 0.1) {
+                        castRay(fogCtx, light, angle, radius);
+                    }
+                });
+
+                ctx.drawImage(fogCanvas, 0, 0);
+            }
+
+            function castRay(fogCtx, light, angle, maxDistance) {
+    const rayX = Math.cos(angle);
+    const rayY = Math.sin(angle);
+    let distance = 0;
+
+    while (distance < maxDistance) {
+        const x = light.x + rayX * distance;
+        const y = light.y + rayY * distance;
+
+        if (isTileAtPosition(x, y)) {
+            // Draw shadow
+            fogCtx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            fogCtx.beginPath();
+            fogCtx.moveTo(light.x, light.y);
+            fogCtx.lineTo(x, y);
+            fogCtx.lineTo(x + rayX * (maxDistance - distance), y + rayY * (maxDistance - distance));
+            fogCtx.closePath();
+            fogCtx.fill();
+            break;
+        }
+
+        distance += gridSize / 2;
+    }
+}
+
+            function isTileAtPosition(x, y) {
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        if (layer.name === 'Fog') continue;
+        for (let j = 0; j < layer.items.length; j++) {
+            const item = layer.items[j];
+            if (x >= item.x && x < item.x + item.image.width &&
+                y >= item.y && y < item.y + item.image.height) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+            function updateLayerList() {
+                layerList.innerHTML = '';
+                layers.forEach((layer, index) => {
+                    const layerDiv = document.createElement('div');
+                    layerDiv.className = `layer ${index === activeLayerIndex ? 'active-layer' : ''}`;
+                    layerDiv.innerHTML = `
+                        <span class="layer-name" style="color: ${layer.color}">${layer.name}</span>
+                        <i class="material-icons layer-visibility">${layer.visible ? 'visibility' : 'visibility_off'}</i>
+                        <i class="material-icons layer-lock">${layer.locked ? 'lock' : 'lock_open'}</i>
+                    `;
+                    layerDiv.querySelector('.layer-name').addEventListener('click', () => setActiveLayer(index));
+                    layerDiv.querySelector('.layer-visibility').addEventListener('click', () => toggleLayerVisibility(index));
+                    layerDiv.querySelector('.layer-lock').addEventListener('click', () => toggleLayerLock(index));
+                    layerList.appendChild(layerDiv);
+                });
+            }
+
+            function setActiveLayer(index) {
+                activeLayerIndex = index;
+                updateLayerList();
+            }
+
+            function toggleLayerVisibility(index) {
+                layers[index].visible = !layers[index].visible;
+                updateLayerList();
+                redrawCanvas();
+            }
+
+            function toggleLayerLock(index) {
+                layers[index].locked = !layers[index].locked;
+                updateLayerList();
+            }
+
+            function handleSpritesheet() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.getElementById('spritesheet-img');
+                        img.src = e.target.result;
+                        img.onload = function() {
+                            document.getElementById('spritesheet-dialog').style.display = 'block';
+                            spritesheetZoom = 1;
+                            spritesheetPan = { x: 0, y: 0 };
+                            gridOffset = { x: 0, y: 0 };
+                            updateSpritesheetView();
+                            drawSpritesheetGrid();
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                };
+                input.click();
+            }
+
+            function updateSpritesheetView() {
+                const img = document.getElementById('spritesheet-img');
+                img.style.transform = `scale(${spritesheetZoom}) translate(${spritesheetPan.x}px, ${spritesheetPan.y}px)`;
+            }
+
+            function drawSpritesheetGrid() {
+                const img = document.getElementById('spritesheet-img');
+                const canvas = document.getElementById('spritesheet-grid');
+                const ctx = canvas.getContext('2d');
+                const width = parseInt(document.getElementById('sprite-width').value);
+                const height = parseInt(document.getElementById('sprite-height').value);
+
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 1 / spritesheetZoom;
+
+                const offsetX = parseInt(document.getElementById('grid-offset-x').value) || 0;
+                const offsetY = parseInt(document.getElementById('grid-offset-y').value) || 0;
+
+                for (let x = offsetX; x < img.width; x += width) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, img.height);
+                    ctx.stroke();
+                }
+                for (let y = offsetY; y < img.height; y += height) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(img.width, y);
+                    ctx.stroke();
+                }
+            }
+
+            function sliceSpritesheet() {
+                const img = document.getElementById('spritesheet-img');
+                const width = parseInt(document.getElementById('sprite-width').value);
+                const height = parseInt(document.getElementById('sprite-height').value);
+                const offsetX = parseInt(document.getElementById('grid-offset-x').value) || 0;
+                const offsetY = parseInt(document.getElementById('grid-offset-y').value) || 0;
+                const filename = img.src.split('/').pop().split('.')[0].substring(0, 10);
+
+                sprites = [];
+                for (let y = offsetY; y < img.height; y += height) {
+                    for (let x = offsetX; x < img.width; x += width) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+                        sprites.push({
+                            name: `${filename}-${sprites.length}`,
+                            image: canvas
+                        });
+                    }
+                }
+
+                document.getElementById('spritesheet-dialog').style.display = 'none';
+                updateSpriteList();
+            }
+
+            function updateSpriteList() {
+                spriteList.innerHTML = '';
+                sprites.forEach((sprite, index) => {
+                    const spriteElement = document.createElement('div');
+                    spriteElement.className = 'sprite-item';
+                    spriteElement.innerHTML = `<img src="${sprite.image.toDataURL()}" title="${sprite.name}">`;
+                    spriteElement.addEventListener('click', () => {
+                        activeSprite = sprite;
+                        activeTool = 'brush';
+                        updateToolHighlight();
+                    });
+                    spriteList.appendChild(spriteElement);
+                });
+            }
+
+            function updateToolHighlight() {
+                document.querySelectorAll('.tool-button').forEach(button => {
+                    button.classList.remove('active');
+                    if (button.getAttribute('data-tool') === activeTool) {
+                        button.classList.add('active');
+                    }
+                });
+            }
+
+            function snapToGrid(x, y) {
+                return {
+                    x: Math.round(x / gridSize) * gridSize,
+                    y: Math.round(y / gridSize) * gridSize
+                };
+            }
+
+            function getMousePos(evt) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: (evt.clientX - rect.left - panOffset.x) / zoomLevel,
+                    y: (evt.clientY - rect.top - panOffset.y) / zoomLevel
+                };
+            }
+            //brad
+            function saveTilesheet() {
+    if (!sprites.length) {
+        alert('No sprites to save. Please load and slice a spritesheet first.');
+        return;
+    }
+
+    const zip = new JSZip();
+    const infoFile = new Blob([JSON.stringify({
+        gridWidth: parseInt(document.getElementById('sprite-width').value),
+        gridHeight: parseInt(document.getElementById('sprite-height').value)
+    })], {type: 'application/json'});
+    zip.file('tilesheet_info.json', infoFile);
+
+    sprites.forEach((sprite, index) => {
+        zip.file(`sprite_${index}.png`, dataURLtoBlob(sprite.image.toDataURL()), {base64: true});
+    });
+
+    zip.generateAsync({type: 'blob'})
+        .then(function(content) {
+            const url = URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sliced_tilesheet.zip';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+}
+
+function loadTilesheet() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = function(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            JSZip.loadAsync(e.target.result).then(function(zip) {
+                zip.file('tilesheet_info.json').async('string').then(function(infoContent) {
+                    const info = JSON.parse(infoContent);
+                    document.getElementById('sprite-width').value = info.gridWidth;
+                    document.getElementById('sprite-height').value = info.gridHeight;
+                    gridSize = info.gridWidth; // Assuming square tiles
+                    
+                    sprites = [];
+                    const spritePromises = [];
+                    zip.forEach(function(relativePath, zipEntry) {
+                        if (relativePath.startsWith('sprite_') && relativePath.endsWith('.png')) {
+                            const promise = zipEntry.async('base64').then(function(content) {
+                                return new Promise((resolve) => {
+                                    const img = new Image();
+                                    img.onload = function() {
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = img.width;
+                                        canvas.height = img.height;
+                                        const ctx = canvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0);
+                                        sprites.push({
+                                            name: relativePath.split('.')[0],
+                                            image: canvas
+                                        });
+                                        resolve();
+                                    };
+                                    img.src = 'data:image/png;base64,' + content;
+                                });
+                            });
+                            spritePromises.push(promise);
+                        }
+                    });
+
+                    Promise.all(spritePromises).then(function() {
+                        updateSpriteList();
+                        redrawCanvas();
+                    });
+                });
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    };
+    input.click();
+}
+
+function dataURLtoBlob(dataurl) {
+    var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+        bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], {type:mime});
+}
+
+            canvas.addEventListener('mousedown', function(event) {
+                const pos = getMousePos(event);
+                if (activeTool === 'select') {
+                    selectedTile = null;
+                    for (let i = layers.length - 1; i >= 0; i--) {
+                        const layer = layers[i];
+                        if (layer.visible && !layer.locked) {
+                            for (let j = layer.items.length - 1; j >= 0; j--) {
+                                const item = layer.items[j];
+                                if (pos.x >= item.x && pos.x < item.x + item.image.width &&
+                                    pos.y >= item.y && pos.y < item.y + item.image.height) {
+                                    selectedTile = item;
+                                    break;
+                                }
+                            }
+                            if (selectedTile) break;
+                        }
+                    }
+                    redrawCanvas();
+                } else if (activeTool === 'brush' && activeSprite) {
+                    const snappedPos = snapToGrid(pos.x, pos.y);
+                    layers[activeLayerIndex].items.push({
+                        image: activeSprite.image,
+                        x: snappedPos.x,
+                        y: snappedPos.y
+                    });
+                    redrawCanvas();
+                } else if (activeTool === 'torch') {
+                    const snappedPos = snapToGrid(pos.x, pos.y);
+                    lightSources.push({ x: snappedPos.x + gridSize / 2, y: snappedPos.y + gridSize / 2 });
+                    redrawCanvas();
+                }
+                lastX = event.clientX;
+                lastY = event.clientY;
+                isDragging = true;
+            });
+
+            canvas.addEventListener('mousemove', function(event) {
+                if (isDragging) {
+                    const deltaX = event.clientX - lastX;
+                    const deltaY = event.clientY - lastY;
+                    if (activeTool === 'select' && selectedTile) {
+                        selectedTile.x += deltaX / zoomLevel;
+                        selectedTile.y += deltaY / zoomLevel;
+                        
+                        // Add visual indicator for snap position
+                        const snappedPos = snapToGrid(selectedTile.x, selectedTile.y);
+                        ctx.save();
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                        ctx.strokeRect(snappedPos.x, snappedPos.y, selectedTile.image.width, selectedTile.image.height);
+                        ctx.restore();
+                    } else if (activeTool === 'hand') {
+                        panOffset.x += deltaX;
+                        panOffset.y += deltaY;
+                    } else if (activeTool === 'brush' && activeSprite) {
+                        const pos = getMousePos(event);
+                        const snappedPos = snapToGrid(pos.x, pos.y);
+                        layers[activeLayerIndex].items.push({
+                            image: activeSprite.image,
+                            x: snappedPos.x,
+                            y: snappedPos.y
+                        });
+                    }
+                    lastX = event.clientX;
+                    lastY = event.clientY;
+                    redrawCanvas();
+                }
+            });
+
+            canvas.addEventListener('mouseup', function(event) {
+                if (isDragging && activeTool === 'select' && selectedTile) {
+                    const snappedPos = snapToGrid(selectedTile.x, selectedTile.y);
+                    selectedTile.x = snappedPos.x;
+                    selectedTile.y = snappedPos.y;
+                    redrawCanvas();
+                }
+                isDragging = false;
+            });
+
+            canvas.addEventListener('dblclick', function(event) {
+                if (selectedTile) {
+                    showContextMenu(event.clientX, event.clientY);
+                }
+            });
+
+            function showContextMenu(x, y) {
+                const contextMenu = document.createElement('div');
+                contextMenu.className = 'context-menu';
+                contextMenu.style.left = `${x}px`;
+                contextMenu.style.top = `${y}px`;
+
+                const actions = ['Rotate', 'Flip Horizontal', 'Flip Vertical', 'Delete'];
+                actions.forEach(action => {
+                    const item = document.createElement('div');
+                    item.className = 'context-menu-item';
+                    item.textContent = action;
+                    item.addEventListener('click', () => handleContextMenuAction(action));
+                    contextMenu.appendChild(item);
+                });
+
+                document.body.appendChild(contextMenu);
+
+                function handleContextMenuAction(action) {
+                    switch (action) {
+                        case 'Rotate':
+                            rotateTile(selectedTile);
+                            break;
+                        case 'Flip Horizontal':
+                            flipTileHorizontal(selectedTile);
+                            break;
+                        case 'Flip Vertical':
+                            flipTileVertical(selectedTile);
+                            break;
+                        case 'Delete':
+                            deleteTile(selectedTile);
+                            break;
+                    }
+                    document.body.removeChild(contextMenu);
+                    redrawCanvas();
+                }
+
+                document.addEventListener('click', function removeMenu() {
+                    if (document.body.contains(contextMenu)) {
+                        document.body.removeChild(contextMenu);
+                    }
+                    document.removeEventListener('click', removeMenu);
+                });
+            }
+
+            function rotateTile(tile) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = tile.image.height;
+                tempCanvas.height = tile.image.width;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+                tempCtx.rotate(Math.PI / 2);
+                tempCtx.drawImage(tile.image, -tile.image.width / 2, -tile.image.height / 2);
+                tile.image = tempCanvas;
+            }
+
+            function flipTileHorizontal(tile) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = tile.image.width;
+                tempCanvas.height = tile.image.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.scale(-1, 1);
+                tempCtx.drawImage(tile.image, -tile.image.width, 0);
+                tile.image = tempCanvas;
+            }
+
+            function flipTileVertical(tile) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = tile.image.width;
+                tempCanvas.height = tile.image.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.scale(1, -1);
+                tempCtx.drawImage(tile.image, 0, -tile.image.height);
+                tile.image = tempCanvas;
+            }
+
+            function deleteTile(tile) {
+                layers[activeLayerIndex].items = layers[activeLayerIndex].items.filter(item => item !== tile);
+                selectedTile = null;
+            }
+
+            canvas.addEventListener('wheel', function(event) {
+                event.preventDefault();
+                const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+                const mouseX = event.clientX - canvas.offsetLeft;
+                const mouseY = event.clientY - canvas.offsetTop;
+                
+                zoomLevel *= zoomFactor;
+                zoomLevel *= zoomFactor;
+                zoomLevel = Math.min(Math.max(zoomLevel, 0.1), 10);
+
+                panOffset.x = mouseX - (mouseX - panOffset.x) * zoomFactor;
+                panOffset.y = mouseY - (mouseY - panOffset.y) * zoomFactor;
+
+                redrawCanvas();
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('wheel', function(event) {
+                event.preventDefault();
+                const rect = this.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+
+                const zoom = event.deltaY > 0 ? 0.9 : 1.1;
+                spritesheetZoom *= zoom;
+
+                spritesheetPan.x = mouseX - (mouseX - spritesheetPan.x) * zoom;
+                spritesheetPan.y = mouseY - (mouseY - spritesheetPan.y) * zoom;
+
+                updateSpritesheetView();
+                drawSpritesheetGrid();
+            });
+
+            let isDraggingSpritesheet = false;
+            let lastSpritesheetX, lastSpritesheetY;
+
+            document.getElementById('spritesheet-container').addEventListener('mousedown', function(event) {
+                isDraggingSpritesheet = true;
+                lastSpritesheetX = event.clientX;
+                lastSpritesheetY = event.clientY;
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('mousemove', function(event) {
+                if (isDraggingSpritesheet) {
+                    const deltaX = event.clientX - lastSpritesheetX;
+                    const deltaY = event.clientY - lastSpritesheetY;
+                    spritesheetPan.x += deltaX / spritesheetZoom;
+                    spritesheetPan.y += deltaY / spritesheetZoom;
+                    lastSpritesheetX = event.clientX;
+                    lastSpritesheetY = event.clientY;
+                    updateSpritesheetView();
+                    drawSpritesheetGrid();
+                }
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('mouseup', function() {
+                isDraggingSpritesheet = false;
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('mouseleave', function() {
+                isDraggingSpritesheet = false;
+            });
+
+            document.querySelectorAll('.tool-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    activeTool = this.getAttribute('data-tool');
+                    updateToolHighlight();
+                });
+            });
+
+            document.getElementById('settings-btn').addEventListener('click', function() {
+                const settingsHtml = `
+                    <div id="settings-modal" class="modal">
+                        <div class="modal-content">
+                            <h4>Grid Settings</h4>
+                            <div>
+                                <label for="grid-size">Grid Size:</label>
+                                <input type="number" id="grid-size" value="${gridSize}" min="1">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+                            <a href="#!" class="modal-close waves-effect waves-green btn-flat" id="save-settings">Save</a>
+                        </div>
+                    </div>
+                `;
+                
+                const settingsElement = document.createElement('div');
+                settingsElement.innerHTML = settingsHtml;
+                document.body.appendChild(settingsElement);
+
+                const settingsModal = M.Modal.init(document.getElementById('settings-modal'));
+                settingsModal.open();
+
+                document.getElementById('save-settings').addEventListener('click', function() {
+                    gridSize = parseInt(document.getElementById('grid-size').value);
+                    redrawCanvas();
+                });
+            });
+
+            document.getElementById('help-btn').addEventListener('click', function() {
+                const helpModal = M.Modal.init(document.getElementById('help-modal'));
+                helpModal.open();
+            });
+
+            document.getElementById('spritesheet-btn').addEventListener('click', handleSpritesheet);
+            document.getElementById('sprite-width').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('sprite-height').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('grid-offset-x').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('grid-offset-y').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('spritesheet-ok').addEventListener('click', sliceSpritesheet);
+            document.getElementById('add-layer-btn').addEventListener('click', function() {
+                const name = prompt('Enter layer name:');
+                if (name) {
+                    layers.push({ name, color: 'white', visible: true, locked: false, items: [] });
+                    updateLayerList();
+                }
+            });
+            document.getElementById('save-btn').addEventListener('click', function() {
+                const mapData = {
+                    layers: layers,
+                    gridSize: gridSize,
+                    zoomLevel: zoomLevel,
+                    panOffset: panOffset,
+                    lightSources: lightSources
+                };
+                const mapDataString = JSON.stringify(mapData);
+                const blob = new Blob([mapDataString], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'map.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+            document.getElementById('load-btn').addEventListener('click', function() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const mapData = JSON.parse(e.target.result);
+                        layers = mapData.layers;
+                        gridSize = mapData.gridSize;
+                        zoomLevel = mapData.zoomLevel;
+                        panOffset = mapData.panOffset;
+                        lightSources = mapData.lightSources || [];
+                        updateLayerList();
+                        redrawCanvas();
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+            //brad 2
+
+            document.getElementById('save-tilesheet-btn').addEventListener('click', saveTilesheet);
+document.getElementById('load-tilesheet-btn').addEventListener('click', loadTilesheet);
+
+// Load JSZip library dynamically
+const script = document.createElement('script');
+script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js';
+script.onload = function() {
+    JSZip = window.JSZip;
+};
+document.head.appendChild(script);
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            updateLayerList();
+            updateToolHighlight();
+        });
+    </script>
+</body>
+</html>
