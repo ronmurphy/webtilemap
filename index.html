@@ -101,14 +101,14 @@
             overflow: auto;
         }
         .context-menu {
-            position: absolute;
-            background-color: white;
+            position: fixed;
+            background: white;
             border: 1px solid #ccc;
-            padding: 5px 0;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
             z-index: 1000;
         }
         .context-menu-item {
-            padding: 5px 20px;
+            padding: 8px 12px;
             cursor: pointer;
         }
         .context-menu-item:hover {
@@ -127,6 +127,14 @@
         #torch-btn {
             color: #FF4500;
         }
+        #tile-chooser {
+    display: block !important;
+}
+#tile-chooser select {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+}
     </style>
 </head>
 <body>
@@ -219,13 +227,14 @@
             const layerList = document.getElementById('layer-list');
             const spriteList = document.getElementById('sprite-list');
             let layers = [
-                { name: 'Fog', color: 'grey', visible: true, locked: false, items: [] },
-                { name: 'Assets', color: 'yellow', visible: true, locked: false, items: [] },
-                { name: 'Tiles', color: 'black', visible: true, locked: false, items: [] },
-                { name: 'Background', color: 'green', visible: true, locked: false, items: [] },
-                { name: 'Blueprints', color: 'blue', visible: true, locked: false, items: [] }
-            ];
-            let activeLayerIndex = 2;
+    { name: 'Fog', color: 'grey', visible: false, locked: false, items: [] },
+    { name: 'Assets', color: 'yellow', visible: true, locked: false, items: [] },
+    { name: 'Tiles', color: 'black', visible: true, locked: false, items: [] },
+    { name: 'Background', color: 'green', visible: true, locked: false, items: [] },
+    { name: 'Blueprints', color: 'blue', visible: true, locked: false, items: [] }
+];
+            //let activeLayerIndex = 2;
+            let activeLayerIndex = 0; // This should be updated when the user changes the active layer
             let activeTool = 'select';
             let gridSize = 32;
             let zoomLevel = 1;
@@ -240,7 +249,12 @@
             let gridOffset = { x: 0, y: 0 };
             let lightSources = [];
             let JSZip; // We'll load this dynamically
+            let marqueeStart = null;
+            let marqueeEnd = null;
+            let selectedTiles = [];
+            let useOpacityForHiddenLayers = true; // Default to using opacity
 
+            addTooltips();
             function resizeCanvas() {
                 canvas.width = canvas.parentElement.clientWidth;
                 canvas.height = canvas.parentElement.clientHeight;
@@ -248,48 +262,87 @@
             }
 
             function redrawCanvas() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.save();
-                ctx.translate(panOffset.x, panOffset.y);
-                ctx.scale(zoomLevel, zoomLevel);
-                drawGrid();
-                layers.forEach((layer, index) => {
-                    if (layer.visible) {
-                        layer.items.forEach(item => {
-                            ctx.drawImage(item.image, item.x, item.y);
-                            if (item === selectedTile) {
-                                ctx.strokeStyle = 'red';
-                                ctx.lineWidth = 2 / zoomLevel;
-                                ctx.strokeRect(item.x, item.y, item.image.width, item.image.height);
-                            }
-                        });
-                    }
-                });
-                drawLighting();
-                ctx.restore();
-            }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(panOffset.x, panOffset.y);
+    ctx.scale(zoomLevel, zoomLevel);
 
-            function drawGrid() {
-                ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
-                ctx.lineWidth = 1 / zoomLevel;
-                const startX = Math.floor(-panOffset.x / zoomLevel / gridSize) * gridSize;
-                const startY = Math.floor(-panOffset.y / zoomLevel / gridSize) * gridSize;
-                const endX = startX + canvas.width / zoomLevel + gridSize;
-                const endY = startY + canvas.height / zoomLevel + gridSize;
+    // Draw grid
+    drawGrid();
 
-                for (let x = startX; x < endX; x += gridSize) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, startY);
-                    ctx.lineTo(x, endY);
-                    ctx.stroke();
-                }
-                for (let y = startY; y < endY; y += gridSize) {
-                    ctx.beginPath();
-                    ctx.moveTo(startX, y);
-                    ctx.lineTo(endX, y);
-                    ctx.stroke();
-                }
+    // Draw all layers and their items
+    layers.forEach((layer, index) => {
+        if (useOpacityForHiddenLayers || layer.visible) {
+            ctx.save();
+            if (!layer.visible) {
+                ctx.globalAlpha = 0.3; // 30% opacity for "hidden" layers
             }
+            layer.items.forEach(item => {
+                ctx.drawImage(item.image, item.x, item.y);
+                
+                // Highlight the selected tile if there is one
+                if (selectedTile === item) {
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 2 / zoomLevel;
+                    ctx.strokeRect(item.x, item.y, item.image.width, item.image.height);
+                }
+            });
+            ctx.restore();
+        }
+    });
+
+    // Draw lighting effects if applicable
+    drawLighting();
+
+    // Draw marquee selection if active
+    if (marqueeStart && marqueeEnd) {
+        drawMarqueeSelection();
+    }
+
+    // Highlight selected tiles
+    highlightSelectedTiles();
+
+    ctx.restore();
+}
+
+function toggleVisibilityBehavior() {
+    useOpacityForHiddenLayers = !useOpacityForHiddenLayers;
+    redrawCanvas();
+}
+
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+function drawGrid() {
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+    ctx.lineWidth = 1 / zoomLevel;
+
+    const startX = Math.floor(-panOffset.x / zoomLevel / gridSize) * gridSize;
+    const startY = Math.floor(-panOffset.y / zoomLevel / gridSize) * gridSize;
+    const endX = startX + canvas.width / zoomLevel + gridSize;
+    const endY = startY + canvas.height / zoomLevel + gridSize;
+
+    for (let x = startX; x < endX; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.stroke();
+    }
+
+    for (let y = startY; y < endY; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+    }
+}
 
             function drawLighting() {
                 const fogLayer = layers.find(layer => layer.name === 'Fog');
@@ -320,6 +373,8 @@
                     for (let angle = 0; angle < Math.PI * 2; angle += 0.1) {
                         castRay(fogCtx, light, angle, radius);
                     }
+                    console.log('Sprites available:', sprites.length);
+console.log('Sprite list:', sprites);
                 });
 
                 ctx.drawImage(fogCanvas, 0, 0);
@@ -365,22 +420,22 @@
     return false;
 }
 
-            function updateLayerList() {
-                layerList.innerHTML = '';
-                layers.forEach((layer, index) => {
-                    const layerDiv = document.createElement('div');
-                    layerDiv.className = `layer ${index === activeLayerIndex ? 'active-layer' : ''}`;
-                    layerDiv.innerHTML = `
-                        <span class="layer-name" style="color: ${layer.color}">${layer.name}</span>
-                        <i class="material-icons layer-visibility">${layer.visible ? 'visibility' : 'visibility_off'}</i>
-                        <i class="material-icons layer-lock">${layer.locked ? 'lock' : 'lock_open'}</i>
-                    `;
-                    layerDiv.querySelector('.layer-name').addEventListener('click', () => setActiveLayer(index));
-                    layerDiv.querySelector('.layer-visibility').addEventListener('click', () => toggleLayerVisibility(index));
-                    layerDiv.querySelector('.layer-lock').addEventListener('click', () => toggleLayerLock(index));
-                    layerList.appendChild(layerDiv);
-                });
-            }
+function updateLayerList() {
+    layerList.innerHTML = '';
+    layers.forEach((layer, index) => {
+        const layerDiv = document.createElement('div');
+        layerDiv.className = `layer ${index === activeLayerIndex ? 'active-layer' : ''}`;
+        layerDiv.innerHTML = `
+            <span class="layer-name" style="color: ${layer.color}">${layer.name}</span>
+            <i class="material-icons layer-visibility">${layer.visible ? 'visibility' : 'visibility_off'}</i>
+            <i class="material-icons layer-lock">${layer.locked ? 'lock' : 'lock_open'}</i>
+        `;
+        layerDiv.querySelector('.layer-name').addEventListener('click', () => setActiveLayer(index));
+        layerDiv.querySelector('.layer-visibility').addEventListener('click', () => toggleLayerVisibility(index));
+        layerDiv.querySelector('.layer-lock').addEventListener('click', () => toggleLayerLock(index));
+        layerList.appendChild(layerDiv);
+    });
+}
 
             function setActiveLayer(index) {
                 activeLayerIndex = index;
@@ -388,10 +443,10 @@
             }
 
             function toggleLayerVisibility(index) {
-                layers[index].visible = !layers[index].visible;
-                updateLayerList();
-                redrawCanvas();
-            }
+    layers[index].visible = !layers[index].visible;
+    updateLayerList();
+    redrawCanvas();
+}
 
             function toggleLayerLock(index) {
                 layers[index].locked = !layers[index].locked;
@@ -482,6 +537,7 @@
 
                 document.getElementById('spritesheet-dialog').style.display = 'none';
                 updateSpriteList();
+                updateTileChoosers();
             }
 
             function updateSpriteList() {
@@ -500,13 +556,13 @@
             }
 
             function updateToolHighlight() {
-                document.querySelectorAll('.tool-button').forEach(button => {
-                    button.classList.remove('active');
-                    if (button.getAttribute('data-tool') === activeTool) {
-                        button.classList.add('active');
-                    }
-                });
-            }
+    document.querySelectorAll('.tool-button').forEach(button => {
+        button.classList.remove('active');
+        if (button.getAttribute('data-tool') === activeTool) {
+            button.classList.add('active');
+        }
+    });
+}
 
             function snapToGrid(x, y) {
                 return {
@@ -515,13 +571,13 @@
                 };
             }
 
-            function getMousePos(evt) {
-                const rect = canvas.getBoundingClientRect();
-                return {
-                    x: (evt.clientX - rect.left - panOffset.x) / zoomLevel,
-                    y: (evt.clientY - rect.top - panOffset.y) / zoomLevel
-                };
-            }
+            function getMousePos(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (event.clientX - rect.left - panOffset.x) / zoomLevel,
+        y: (event.clientY - rect.top - panOffset.y) / zoomLevel
+    };
+}
             //brad
             function saveTilesheet() {
     if (!sprites.length) {
@@ -550,6 +606,34 @@
             URL.revokeObjectURL(url);
         });
 }
+
+function addTooltips() {
+    const tooltips = {
+        'select': 'Select Tool',
+        'move': 'Move Tool',
+        'marquee': 'Marquee Tool',
+        'brush': 'Brush Tool',
+        'eraser': 'Eraser Tool',
+        'fill': 'Fill Tool',
+        'text': 'Text Tool',
+        'eyedropper': 'Eyedropper Tool',
+        'zoom': 'Zoom Tool',
+        'hand': 'Hand Tool',
+        'torch': 'Torch Tool',
+        'settings': 'Settings',
+        'help': 'Help'
+    };
+
+    document.querySelectorAll('.tool-button').forEach(button => {
+        const tool = button.getAttribute('data-tool');
+        if (tooltips[tool]) {
+            button.setAttribute('title', tooltips[tool]);
+        }
+    });
+}
+
+
+
 
 function loadTilesheet() {
     const input = document.createElement('input');
@@ -613,171 +697,447 @@ function dataURLtoBlob(dataurl) {
     return new Blob([u8arr], {type:mime});
 }
 
-            canvas.addEventListener('mousedown', function(event) {
-                const pos = getMousePos(event);
-                if (activeTool === 'select') {
-                    selectedTile = null;
-                    for (let i = layers.length - 1; i >= 0; i--) {
-                        const layer = layers[i];
-                        if (layer.visible && !layer.locked) {
-                            for (let j = layer.items.length - 1; j >= 0; j--) {
-                                const item = layer.items[j];
-                                if (pos.x >= item.x && pos.x < item.x + item.image.width &&
-                                    pos.y >= item.y && pos.y < item.y + item.image.height) {
-                                    selectedTile = item;
-                                    break;
-                                }
-                            }
-                            if (selectedTile) break;
-                        }
-                    }
+canvas.addEventListener('mousedown', function(event) {
+    const pos = getMousePos(event);
+    lastX = event.clientX;
+    lastY = event.clientY;
+    isDragging = true;
+
+    switch (activeTool) {
+        case 'eraser':
+            handleEraserTool(event);
+            break;
+        case 'brush':
+            if (activeSprite) {
+                const snappedPos = snapToGrid(pos.x, pos.y);
+                if (!isTileAtPosition(snappedPos.x, snappedPos.y)) {
+                    placeTile(snappedPos.x, snappedPos.y);
                     redrawCanvas();
-                } else if (activeTool === 'brush' && activeSprite) {
+                }
+            }
+            break;
+        case 'select':
+            selectedTile = findClickedTile(pos);
+            if (selectedTile) {
+                offsetX = pos.x - selectedTile.item.x;
+                offsetY = pos.y - selectedTile.item.y;
+            }
+            break;
+        case 'move':
+            panStartX = event.clientX - panOffset.x;
+            panStartY = event.clientY - panOffset.y;
+            break;
+        case 'marquee':
+            marqueeStart = pos;
+            marqueeEnd = pos;
+            selectedTiles = []; // Clear previous selection
+            break;
+        case 'fill':
+            if (activeSprite) {
+                floodFill(pos.x, pos.y);
+                break;
+            //floodFill(pos.x, pos.y);
+            //break;
+              //  // fillArea(pos);
+              //  // redrawCanvas();
+            }
+            break;
+        case 'eyedropper':
+            const pickedTile = findClickedTile(pos);
+            if (pickedTile) {
+                activeSprite = { image: pickedTile.item.image };
+                activeTool = 'brush'; // Switch to brush after picking a color
+                updateToolHighlight();
+            }
+            break;
+        case 'hand':
+            panStartX = event.clientX - panOffset.x;
+            panStartY = event.clientY - panOffset.y;
+            break;
+        case 'torch':
+            placeLightSource(pos);
+            redrawCanvas();
+            break;
+    }
+});canvas.addEventListener('mousemove', function(event) {
+    if (isDragging) {
+        const pos = getMousePos(event);
+        const deltaX = event.clientX - lastX;
+        const deltaY = event.clientY - lastY;
+
+        switch (activeTool) {
+            case 'eraser':
+                handleEraserTool(event);
+                break;
+            case 'brush':
+                if (activeSprite) {
                     const snappedPos = snapToGrid(pos.x, pos.y);
-                    layers[activeLayerIndex].items.push({
-                        image: activeSprite.image,
-                        x: snappedPos.x,
-                        y: snappedPos.y
-                    });
-                    redrawCanvas();
-                } else if (activeTool === 'torch') {
-                    const snappedPos = snapToGrid(pos.x, pos.y);
-                    lightSources.push({ x: snappedPos.x + gridSize / 2, y: snappedPos.y + gridSize / 2 });
-                    redrawCanvas();
-                }
-                lastX = event.clientX;
-                lastY = event.clientY;
-                isDragging = true;
-            });
-
-            canvas.addEventListener('mousemove', function(event) {
-                if (isDragging) {
-                    const deltaX = event.clientX - lastX;
-                    const deltaY = event.clientY - lastY;
-                    if (activeTool === 'select' && selectedTile) {
-                        selectedTile.x += deltaX / zoomLevel;
-                        selectedTile.y += deltaY / zoomLevel;
-                        
-                        // Add visual indicator for snap position
-                        const snappedPos = snapToGrid(selectedTile.x, selectedTile.y);
-                        ctx.save();
-                        ctx.setLineDash([5, 5]);
-                        ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-                        ctx.strokeRect(snappedPos.x, snappedPos.y, selectedTile.image.width, selectedTile.image.height);
-                        ctx.restore();
-                    } else if (activeTool === 'hand') {
-                        panOffset.x += deltaX;
-                        panOffset.y += deltaY;
-                    } else if (activeTool === 'brush' && activeSprite) {
-                        const pos = getMousePos(event);
-                        const snappedPos = snapToGrid(pos.x, pos.y);
-                        layers[activeLayerIndex].items.push({
-                            image: activeSprite.image,
-                            x: snappedPos.x,
-                            y: snappedPos.y
-                        });
+                    if (!isTileAtPosition(snappedPos.x, snappedPos.y)) {
+                        placeTile(snappedPos.x, snappedPos.y);
+                        redrawCanvas();
                     }
-                    lastX = event.clientX;
-                    lastY = event.clientY;
-                    redrawCanvas();
                 }
-            });
-
-            canvas.addEventListener('mouseup', function(event) {
-                if (isDragging && activeTool === 'select' && selectedTile) {
-                    const snappedPos = snapToGrid(selectedTile.x, selectedTile.y);
-                    selectedTile.x = snappedPos.x;
-                    selectedTile.y = snappedPos.y;
-                    redrawCanvas();
-                }
-                isDragging = false;
-            });
-
-            canvas.addEventListener('dblclick', function(event) {
+                break;
+            case 'select':
                 if (selectedTile) {
-                    showContextMenu(event.clientX, event.clientY);
-                }
-            });
-
-            function showContextMenu(x, y) {
-                const contextMenu = document.createElement('div');
-                contextMenu.className = 'context-menu';
-                contextMenu.style.left = `${x}px`;
-                contextMenu.style.top = `${y}px`;
-
-                const actions = ['Rotate', 'Flip Horizontal', 'Flip Vertical', 'Delete'];
-                actions.forEach(action => {
-                    const item = document.createElement('div');
-                    item.className = 'context-menu-item';
-                    item.textContent = action;
-                    item.addEventListener('click', () => handleContextMenuAction(action));
-                    contextMenu.appendChild(item);
-                });
-
-                document.body.appendChild(contextMenu);
-
-                function handleContextMenuAction(action) {
-                    switch (action) {
-                        case 'Rotate':
-                            rotateTile(selectedTile);
-                            break;
-                        case 'Flip Horizontal':
-                            flipTileHorizontal(selectedTile);
-                            break;
-                        case 'Flip Vertical':
-                            flipTileVertical(selectedTile);
-                            break;
-                        case 'Delete':
-                            deleteTile(selectedTile);
-                            break;
-                    }
-                    document.body.removeChild(contextMenu);
+                    selectedTile.item.x = pos.x - offsetX;
+                    selectedTile.item.y = pos.y - offsetY;
                     redrawCanvas();
                 }
+                break;
+            case 'move':
+                panOffset.x = event.clientX - panStartX;
+                panOffset.y = event.clientY - panStartY;
+                redrawCanvas();
+                break;
+            case 'marquee':
+                marqueeEnd = pos;
+                redrawCanvas();
+                break;
+            case 'hand':
+                panOffset.x = event.clientX - panStartX;
+                panOffset.y = event.clientY - panStartY;
+                redrawCanvas();
+                break;
+        }
 
-                document.addEventListener('click', function removeMenu() {
-                    if (document.body.contains(contextMenu)) {
-                        document.body.removeChild(contextMenu);
-                    }
-                    document.removeEventListener('click', removeMenu);
-                });
-            }
+        lastX = event.clientX;
+        lastY = event.clientY;
+    }
+});
 
-            function rotateTile(tile) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = tile.image.height;
-                tempCanvas.height = tile.image.width;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
-                tempCtx.rotate(Math.PI / 2);
-                tempCtx.drawImage(tile.image, -tile.image.width / 2, -tile.image.height / 2);
-                tile.image = tempCanvas;
-            }
+canvas.addEventListener('mouseup', function() {
+    isDragging = false;
+    if (activeTool === 'select' && selectedTile) {
+        const snappedPos = snapToGrid(selectedTile.item.x, selectedTile.item.y);
+        selectedTile.item.x = snappedPos.x;
+        selectedTile.item.y = snappedPos.y;
+        redrawCanvas();
+    } else if (activeTool === 'marquee') {
+        handleMarqueeSelection();
+    }
+});
 
-            function flipTileHorizontal(tile) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = tile.image.width;
-                tempCanvas.height = tile.image.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.scale(-1, 1);
-                tempCtx.drawImage(tile.image, -tile.image.width, 0);
-                tile.image = tempCanvas;
-            }
+canvas.addEventListener('dblclick', function(event) {
+    const pos = getMousePos(event);
+    const clickedTile = findClickedTile(pos);
+    
+    if (clickedTile) {
+        showContextMenu(event.clientX, event.clientY, clickedTile);
+    }
+});
 
-            function flipTileVertical(tile) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = tile.image.width;
-                tempCanvas.height = tile.image.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.scale(1, -1);
-                tempCtx.drawImage(tile.image, 0, -tile.image.height);
-                tile.image = tempCanvas;
-            }
+canvas.addEventListener('click', function(event) {
+    if (activeTool === 'fill') {
+        const pos = getMousePos(event);
+        floodFill(pos.x, pos.y);
+    }
+});
 
-            function deleteTile(tile) {
-                layers[activeLayerIndex].items = layers[activeLayerIndex].items.filter(item => item !== tile);
-                selectedTile = null;
+function floodFill(startX, startY) {
+    if (!activeSprite) {
+        console.log("No active sprite selected for flood fill");
+        return;
+    }
+
+    const targetLayer = layers[activeLayerIndex];
+    if (!targetLayer) {
+        console.log("Target layer for flood fill not found");
+        return;
+    }
+
+    const startPos = snapToGrid(startX, startY);
+    const startTile = findClickedTile({ x: startPos.x, y: startPos.y });
+
+    if (startTile && startTile.layerIndex !== activeLayerIndex) {
+        console.log("Flood fill can only be applied to the active layer");
+        return;
+    }
+
+    const isUnrestrictedLayer = targetLayer.name === 'Background' || targetLayer.name === 'Blueprints';
+    const visited = new Set();
+    const toFill = [[startPos.x, startPos.y]];
+    const originalTileImage = startTile ? startTile.item.image : null;
+
+    // Calculate visible area boundaries
+    const visibleBounds = getVisibleBounds();
+
+    while (toFill.length > 0) {
+        const [x, y] = toFill.pop();
+        const key = `${x},${y}`;
+
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        // Check if the current position is within the visible bounds
+        if (!isWithinBounds(x, y, visibleBounds)) continue;
+
+        if (!isUnrestrictedLayer && !isInMarqueeSelection(x, y)) continue;
+
+        const currentTile = findClickedTileInLayer({ x, y }, activeLayerIndex);
+        if (currentTile && currentTile.image !== originalTileImage) continue;
+
+        // Place new tile
+        placeTile(x, y, activeLayerIndex);
+
+        // Check neighboring tiles
+        [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(([dx, dy]) => {
+            const newX = x + dx * gridSize;
+            const newY = y + dy * gridSize;
+            toFill.push([newX, newY]);
+        });
+    }
+
+    redrawCanvas();
+}
+
+function getVisibleBounds() {
+    const canvasRect = canvas.getBoundingClientRect();
+    const topLeft = getMousePos({ clientX: canvasRect.left, clientY: canvasRect.top });
+    const bottomRight = getMousePos({ clientX: canvasRect.right, clientY: canvasRect.bottom });
+
+    return {
+        left: Math.floor(topLeft.x / gridSize) * gridSize,
+        top: Math.floor(topLeft.y / gridSize) * gridSize,
+        right: Math.ceil(bottomRight.x / gridSize) * gridSize,
+        bottom: Math.ceil(bottomRight.y / gridSize) * gridSize
+    };
+}
+
+function isWithinBounds(x, y, bounds) {
+    return x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom;
+}
+
+
+function findClickedTileInLayer(pos, layerIndex) {
+    const layer = layers[layerIndex];
+    return layer.items.find(item => 
+        pos.x >= item.x && pos.x < item.x + item.image.width &&
+        pos.y >= item.y && pos.y < item.y + item.image.height
+    );
+}
+
+function isInMarqueeSelection(x, y) {
+    if (!marqueeStart || !marqueeEnd || selectedTiles.length === 0) return true;
+
+    const startX = Math.min(marqueeStart.x, marqueeEnd.x);
+    const startY = Math.min(marqueeStart.y, marqueeEnd.y);
+    const endX = Math.max(marqueeStart.x, marqueeEnd.x);
+    const endY = Math.max(marqueeStart.y, marqueeEnd.y);
+
+    return x >= startX && x < endX && y >= startY && y < endY;
+}
+
+function placeTile(x, y, layerIndex) {
+    const layer = layers[layerIndex];
+    const existingTileIndex = layer.items.findIndex(item => item.x === x && item.y === y);
+
+    if (existingTileIndex !== -1) {
+        layer.items[existingTileIndex] = { x, y, image: activeSprite.image };
+    } else {
+        layer.items.push({ x, y, image: activeSprite.image });
+    }
+}
+
+function drawMarqueeSelection() {
+    if (!marqueeStart || !marqueeEnd) return;
+
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 2 / zoomLevel;
+    ctx.beginPath();
+    
+    const startX = Math.min(marqueeStart.x, marqueeEnd.x);
+    const startY = Math.min(marqueeStart.y, marqueeEnd.y);
+    const width = Math.abs(marqueeEnd.x - marqueeStart.x);
+    const height = Math.abs(marqueeEnd.y - marqueeStart.y);
+    
+    ctx.rect(startX, startY, width, height);
+    ctx.stroke();
+    ctx.restore();
+}
+
+// Implement handleMarqueeSelection function
+function handleMarqueeSelection() {
+    if (!marqueeStart || !marqueeEnd) return;
+
+    selectedTiles = [];
+    const startX = Math.min(marqueeStart.x, marqueeEnd.x);
+    const startY = Math.min(marqueeStart.y, marqueeEnd.y);
+    const endX = Math.max(marqueeStart.x, marqueeEnd.x);
+    const endY = Math.max(marqueeStart.y, marqueeEnd.y);
+
+    layers.forEach((layer, layerIndex) => {
+        if (layer.visible && !layer.locked) {
+            layer.items.forEach(tile => {
+                if (tile.x >= startX && tile.x < endX && tile.y >= startY && tile.y < endY) {
+                    selectedTiles.push({ layerIndex, tile });
+                }
+            });
+        }
+    });
+
+    console.log(`Selected ${selectedTiles.length} tiles`);
+    marqueeStart = null;
+    marqueeEnd = null;
+    redrawCanvas();
+    highlightSelectedTiles();
+}
+
+function highlightSelectedTiles() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 2 / zoomLevel;
+    selectedTiles.forEach(({ tile }) => {
+        ctx.strokeRect(tile.x, tile.y, tile.image.width, tile.image.height);
+    });
+    ctx.restore();
+}
+function isTileAtPosition(x, y) {
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        if (layer.visible && !layer.locked) {
+            for (let j = 0; j < layer.items.length; j++) {
+                const item = layer.items[j];
+                if (x === item.x && y === item.y) {
+                    return true;
+                }
             }
+        }
+    }
+    return false;
+}
+
+
+function handleEraserTool(event) {
+    const pos = getMousePos(event);
+    const snappedPos = snapToGrid(pos.x, pos.y);
+    const tileToDelete = findClickedTileInLayer(snappedPos, activeLayerIndex);
+    
+    if (tileToDelete) {
+        deleteTile(activeLayerIndex, tileToDelete);
+        redrawCanvas();
+    }
+}
+
+function placeTile(x, y) {
+    layers[activeLayerIndex].items.push({
+        image: activeSprite.image,
+        x: x,
+        y: y
+    });
+    redrawCanvas();
+}
+
+function findClickedTile(pos) {
+    const snappedPos = snapToGrid(pos.x, pos.y);
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        if (layer.visible && !layer.locked) {
+            for (let j = layer.items.length - 1; j >= 0; j--) {
+                const item = layer.items[j];
+                if (snappedPos.x === item.x && snappedPos.y === item.y) {
+                    return { item: item, layerIndex: i };
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function showContextMenu(x, y, clickedTile) {
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'context-menu';
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+
+    const actions = ['Rotate', 'Flip Horizontal', 'Flip Vertical', 'Delete'];
+    actions.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'context-menu-item';
+        item.textContent = action;
+        item.addEventListener('click', () => {
+            switch(action) {
+                case 'Rotate':
+                    rotateTile(clickedTile.item);
+                    break;
+                case 'Flip Horizontal':
+                    flipTileHorizontal(clickedTile.item);
+                    break;
+                case 'Flip Vertical':
+                    flipTileVertical(clickedTile.item);
+                    break;
+                case 'Delete':
+                    deleteTile(clickedTile.layerIndex, clickedTile.item);
+                    break;
+            }
+            contextMenu.remove();
+            redrawCanvas();
+        });
+        contextMenu.appendChild(item);
+    });
+
+    document.body.appendChild(contextMenu);
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function closeMenu(e) {
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.remove();
+            document.removeEventListener('click', closeMenu);
+        }
+    });
+}
+
+function rotateTile(tile) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tile.image.height;
+    tempCanvas.height = tile.image.width;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+    tempCtx.rotate(Math.PI / 2);
+    tempCtx.drawImage(tile.image, -tile.image.width / 2, -tile.image.height / 2);
+    tile.image = tempCanvas;
+}
+
+function flipTileHorizontal(tile) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tile.image.width;
+    tempCanvas.height = tile.image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.scale(-1, 1);
+    tempCtx.drawImage(tile.image, -tile.image.width, 0);
+    tile.image = tempCanvas;
+}
+
+function flipTileVertical(tile) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tile.image.width;
+    tempCanvas.height = tile.image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.scale(1, -1);
+    tempCtx.drawImage(tile.image, 0, -tile.image.height);
+    tile.image = tempCanvas;
+}
+
+function deleteTile(layerIndex, tile) {
+    const layer = layers[layerIndex];
+    const index = layer.items.findIndex(item => item.x === tile.x && item.y === tile.y);
+    if (index !== -1) {
+        layer.items.splice(index, 1);
+        console.log(`Tile deleted from layer ${layerIndex}`);
+        if (selectedTile === tile) {
+            selectedTile = null;
+        }
+    } else {
+        console.log(`Tile not found in layer ${layerIndex}`);
+    }
+}
 
             canvas.addEventListener('wheel', function(event) {
                 event.preventDefault();
@@ -848,35 +1208,37 @@ function dataURLtoBlob(dataurl) {
                 });
             });
 
-            document.getElementById('settings-btn').addEventListener('click', function() {
-                const settingsHtml = `
-                    <div id="settings-modal" class="modal">
-                        <div class="modal-content">
-                            <h4>Grid Settings</h4>
-                            <div>
-                                <label for="grid-size">Grid Size:</label>
-                                <input type="number" id="grid-size" value="${gridSize}" min="1">
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
-                            <a href="#!" class="modal-close waves-effect waves-green btn-flat" id="save-settings">Save</a>
-                        </div>
-                    </div>
-                `;
+            document.getElementById('settings-btn').addEventListener('click', showSettingsModal);
+            
+            // document.getElementById('settings-btn').addEventListener('click', function() {
+            //     const settingsHtml = `
+            //         <div id="settings-modal" class="modal">
+            //             <div class="modal-content">
+            //                 <h4>Grid Settings</h4>
+            //                 <div>
+            //                     <label for="grid-size">Grid Size:</label>
+            //                     <input type="number" id="grid-size" value="${gridSize}" min="1">
+            //                 </div>
+            //             </div>
+            //             <div class="modal-footer">
+            //                 <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+            //                 <a href="#!" class="modal-close waves-effect waves-green btn-flat" id="save-settings">Save</a>
+            //             </div>
+            //         </div>
+            //     `;
                 
-                const settingsElement = document.createElement('div');
-                settingsElement.innerHTML = settingsHtml;
-                document.body.appendChild(settingsElement);
+            //     const settingsElement = document.createElement('div');
+            //     settingsElement.innerHTML = settingsHtml;
+            //     document.body.appendChild(settingsElement);
 
-                const settingsModal = M.Modal.init(document.getElementById('settings-modal'));
-                settingsModal.open();
+            //     const settingsModal = M.Modal.init(document.getElementById('settings-modal'));
+            //     settingsModal.open();
 
-                document.getElementById('save-settings').addEventListener('click', function() {
-                    gridSize = parseInt(document.getElementById('grid-size').value);
-                    redrawCanvas();
-                });
-            });
+            //     document.getElementById('save-settings').addEventListener('click', function() {
+            //         gridSize = parseInt(document.getElementById('grid-size').value);
+            //         redrawCanvas();
+            //     });
+            // });
 
             document.getElementById('help-btn').addEventListener('click', function() {
                 const helpModal = M.Modal.init(document.getElementById('help-modal'));
@@ -889,13 +1251,16 @@ function dataURLtoBlob(dataurl) {
             document.getElementById('grid-offset-x').addEventListener('change', drawSpritesheetGrid);
             document.getElementById('grid-offset-y').addEventListener('change', drawSpritesheetGrid);
             document.getElementById('spritesheet-ok').addEventListener('click', sliceSpritesheet);
-            document.getElementById('add-layer-btn').addEventListener('click', function() {
-                const name = prompt('Enter layer name:');
-                if (name) {
-                    layers.push({ name, color: 'white', visible: true, locked: false, items: [] });
-                    updateLayerList();
-                }
-            });
+            document.getElementById('add-layer-btn').addEventListener('click', addNewLayer); 
+            //     const name = prompt('Enter layer name:');
+            //     if (name) {
+            //         layers.push({ name, color: 'white', visible: true, locked: false, items: [] });
+            //         updateLayerList();
+            //     }
+            // });
+
+            document.getElementById('add-layer-btn').addEventListener('click', addNewLayer);
+
             document.getElementById('save-btn').addEventListener('click', function() {
                 const mapData = {
                     layers: layers,
@@ -936,6 +1301,8 @@ function dataURLtoBlob(dataurl) {
             });
             //brad 2
 
+
+            
             document.getElementById('save-tilesheet-btn').addEventListener('click', saveTilesheet);
 document.getElementById('load-tilesheet-btn').addEventListener('click', loadTilesheet);
 
@@ -951,6 +1318,379 @@ document.head.appendChild(script);
             resizeCanvas();
             updateLayerList();
             updateToolHighlight();
+             // Add the new button to the toolbox
+             const dungeonBtn = document.createElement('i');
+dungeonBtn.className = 'material-icons tool-button';
+dungeonBtn.title = 'Generate Dungeon';
+dungeonBtn.textContent = 'door_front'; // Changed to door_front
+dungeonBtn.style.color = 'black'; // Set the color to black
+dungeonBtn.addEventListener('click', openDungeonDialog);
+toolbox.appendChild(dungeonBtn);
+
+function showSettingsModal() {
+    const settingsHtml = `
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <h4>Settings</h4>
+                <div>
+                    <label for="grid-size">Grid Size:</label>
+                    <input type="number" id="grid-size" value="${gridSize}" min="1">
+                </div>
+                <div>
+                    <label>
+                        <input type="checkbox" id="visibility-behavior" ${useOpacityForHiddenLayers ? 'checked' : ''}>
+                        Use opacity for hidden layers
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat" id="save-settings">Save</a>
+            </div>
+        </div>
+    `;
+    
+    const settingsElement = document.createElement('div');
+    settingsElement.innerHTML = settingsHtml;
+    document.body.appendChild(settingsElement);
+
+    const settingsModal = M.Modal.init(document.getElementById('settings-modal'));
+    settingsModal.open();
+
+    document.getElementById('save-settings').addEventListener('click', function() {
+        gridSize = parseInt(document.getElementById('grid-size').value);
+        useOpacityForHiddenLayers = document.getElementById('visibility-behavior').checked;
+        redrawCanvas();
+    });
+}
+
+function addNewLayer() {
+    const name = prompt('Enter layer name:');
+    if (name) {
+        const color = getRandomColor();
+        layers.push({ name, color, visible: true, locked: false, items: [] });
+        updateLayerList();
+    }
+}
+
+function openDungeonDialog() {
+    const dialogHtml = `
+        <div id="dungeon-dialog" class="modal">
+            <div class="modal-content">
+                <h4>Generate Dungeon</h4>
+                <div class="input-field">
+                    <input type="number" id="dungeon-width" value="20" min="10" max="100">
+                    <label for="dungeon-width">Dungeon Width (in tiles)</label>
+                </div>
+                <div class="input-field">
+                    <input type="number" id="dungeon-height" value="20" min="10" max="100">
+                    <label for="dungeon-height">Dungeon Height (in tiles)</label>
+                </div>
+                <div class="input-field">
+                    <input type="number" id="room-count" value="5" min="1" max="20">
+                    <label for="room-count">Number of Rooms</label>
+                </div>
+                <div id="tile-chooser">
+                    <h5>Choose Tiles</h5>
+                    <div class="tile-selector-row">
+                        <div class="tile-selector">
+                            <label>Floor Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="floor-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="tile-selector">
+                            <label>Wall Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="wall-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="tile-selector">
+                            <label>Door Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="door-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="tile-selector">
+                            <label>Corridor Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="corridor-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+                <a href="#!" class="waves-effect waves-green btn-flat" id="generate-dungeon">Generate</a>
+            </div>
+        </div>
+    `;
+    
+    const dialogElement = document.createElement('div');
+    dialogElement.innerHTML = dialogHtml;
+    document.body.appendChild(dialogElement);
+
+    // Add styles for tile previews and carousel
+    const style = document.createElement('style');
+    style.textContent = `
+        #dungeon-dialog .modal-content {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .tile-selector-row {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .tile-selector {
+            flex: 1 1 auto;
+            min-width: 120px;
+            margin: 0 10px 20px;
+            text-align: center;
+        }
+        .tile-carousel {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .tile-preview {
+            width: 64px;
+            height: 64px;
+            border: 1px solid #ccc;
+            margin: 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .tile-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            image-rendering: pixelated;
+        }
+        .prev-tile, .next-tile {
+            background: #f0f0f0;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        @media (max-width: 600px) {
+            .tile-selector {
+                flex-basis: 100%;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    const dungeonDialog = M.Modal.init(document.getElementById('dungeon-dialog'), {
+        dismissible: false, // Prevent closing by clicking outside
+        endingTop: '10%', // Position the modal a bit higher
+    });
+    
+    initTileCarousels();
+    
+    dungeonDialog.open();
+
+    document.getElementById('generate-dungeon').addEventListener('click', generateDungeon);
+}
+
+function initTileCarousels() {
+    const tileTypes = ['floor', 'wall', 'door', 'corridor'];
+    tileTypes.forEach(type => {
+        const preview = document.getElementById(`${type}-tile-preview`);
+        const prevBtn = preview.parentElement.querySelector('.prev-tile');
+        const nextBtn = preview.parentElement.querySelector('.next-tile');
+        let currentIndex = 0;
+
+        function updatePreview() {
+            if (sprites.length > 0) {
+                const sprite = sprites[currentIndex];
+                preview.innerHTML = `<img src="${sprite.image.toDataURL()}" alt="${sprite.name || `Sprite ${currentIndex}`}">`;
+                preview.dataset.spriteIndex = currentIndex;
+            } else {
+                preview.innerHTML = 'No sprites available';
+            }
+        }
+
+        prevBtn.addEventListener('click', () => {
+            currentIndex = (currentIndex - 1 + sprites.length) % sprites.length;
+            updatePreview();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            currentIndex = (currentIndex + 1) % sprites.length;
+            updatePreview();
+        });
+
+        updatePreview();
+    });
+}
+
+function populateTileChoosers() {
+    const tileSelects = ['floor-tile', 'wall-tile', 'door-tile', 'corridor-tile'];
+    tileSelects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (!select) {
+            console.error(`Select element with id "${selectId}" not found`);
+            return;
+        }
+        select.innerHTML = '';
+        if (sprites.length === 0) {
+            console.warn('No sprites available for tile chooser');
+            const option = document.createElement('option');
+            option.textContent = 'No sprites available';
+            select.appendChild(option);
+        } else {
+            sprites.forEach((sprite, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = sprite.name || `Sprite ${index}`;
+                select.appendChild(option);
+            });
+        }
+
+        // Add change event listener to update preview
+        select.addEventListener('change', (event) => {
+            const selectedIndex = event.target.value;
+            const selectedSprite = sprites[selectedIndex];
+            const previewContainer = document.createElement('div');
+            previewContainer.innerHTML = `<strong>Selected ${selectId.replace('-tile', '')} tile:</strong><br>`;
+            const preview = document.createElement('img');
+            preview.src = selectedSprite.image.toDataURL();
+            preview.style.width = '64px';
+            preview.style.height = '64px';
+            preview.style.imageRendering = 'pixelated';
+            previewContainer.appendChild(preview);
+            
+            const existingPreview = select.parentNode.querySelector('.tile-preview-container');
+            if (existingPreview) {
+                existingPreview.remove();
+            }
+            previewContainer.classList.add('tile-preview-container');
+            select.parentNode.appendChild(previewContainer);
+        });
+    });
+
+    // Initialize Materialize select
+    M.FormSelect.init(document.querySelectorAll('select'));
+
+    console.log('Tile choosers populated:', sprites.length, 'sprites available');
+}
+
+function updateTileChoosers() {
+    const dungeonDialog = document.getElementById('dungeon-dialog');
+    if (dungeonDialog) {
+        initTileCarousels();
+    }
+}
+function generateDungeon() {
+    const width = parseInt(document.getElementById('dungeon-width').value);
+    const height = parseInt(document.getElementById('dungeon-height').value);
+    const roomCount = parseInt(document.getElementById('room-count').value);
+    const floorTile = sprites[document.getElementById('floor-tile-preview').dataset.spriteIndex];
+    const wallTile = sprites[document.getElementById('wall-tile-preview').dataset.spriteIndex];
+    const doorTile = sprites[document.getElementById('door-tile-preview').dataset.spriteIndex];
+    const corridorTile = sprites[document.getElementById('corridor-tile-preview').dataset.spriteIndex];
+
+                // Create a 2D array to represent the dungeon
+                const dungeon = Array(height).fill().map(() => Array(width).fill(0));
+
+                // Generate rooms
+                const rooms = [];
+                for (let i = 0; i < roomCount; i++) {
+                    const roomWidth = Math.floor(Math.random() * 5) + 5;
+                    const roomHeight = Math.floor(Math.random() * 5) + 5;
+                    const x = Math.floor(Math.random() * (width - roomWidth - 2)) + 1;
+                    const y = Math.floor(Math.random() * (height - roomHeight - 2)) + 1;
+                    
+                    rooms.push({x, y, width: roomWidth, height: roomHeight});
+                    
+                    // Fill room with floor tiles
+                    for (let dy = 0; dy < roomHeight; dy++) {
+                        for (let dx = 0; dx < roomWidth; dx++) {
+                            dungeon[y + dy][x + dx] = 1;
+                        }
+                    }
+                }
+
+                // Connect rooms with corridors
+                for (let i = 0; i < rooms.length - 1; i++) {
+                    const roomA = rooms[i];
+                    const roomB = rooms[i + 1];
+                    const pointA = {x: roomA.x + Math.floor(roomA.width / 2), y: roomA.y + Math.floor(roomA.height / 2)};
+                    const pointB = {x: roomB.x + Math.floor(roomB.width / 2), y: roomB.y + Math.floor(roomB.height / 2)};
+                    
+                    // Create L-shaped corridor
+                    while (pointA.x !== pointB.x) {
+                        dungeon[pointA.y][pointA.x] = 2;
+                        pointA.x += pointA.x < pointB.x ? 1 : -1;
+                    }
+                    while (pointA.y !== pointB.y) {
+                        dungeon[pointA.y][pointA.x] = 2;
+                        pointA.y += pointA.y < pointB.y ? 1 : -1;
+                    }
+                }
+
+                // Add walls around rooms and corridors
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        if (dungeon[y][x] === 0 && hasAdjacentFloor(dungeon, x, y)) {
+                            dungeon[y][x] = 3;
+                        }
+                    }
+                }
+
+                // Place dungeon on the canvas
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let tile;
+                        switch (dungeon[y][x]) {
+                            case 1: tile = floorTile; break;
+                            case 2: tile = corridorTile; break;
+                            case 3: tile = wallTile; break;
+                            default: continue;
+                        }
+                        layers[activeLayerIndex].items.push({
+                            image: tile.image,
+                            x: x * gridSize,
+                            y: y * gridSize
+                        });
+                    }
+                }
+
+                // Place doors
+                rooms.forEach(room => {
+                    const doorX = room.x + Math.floor(room.width / 2);
+                    const doorY = room.y + room.height - 1;
+                    if (doorY < height - 1 && dungeon[doorY + 1][doorX] === 2) {
+                        layers[activeLayerIndex].items.push({
+                            image: doorTile.image,
+                            x: doorX * gridSize,
+                            y: doorY * gridSize
+                        });
+                    }
+                });
+
+                redrawCanvas();
+                M.Modal.getInstance(document.getElementById('dungeon-dialog')).close();
+            }
+
+            function hasAdjacentFloor(dungeon, x, y) {
+                const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                return directions.some(([dx, dy]) => {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    return nx >= 0 && nx < dungeon[0].length && ny >= 0 && ny < dungeon.length && (dungeon[ny][nx] === 1 || dungeon[ny][nx] === 2);
+                });
+            }
         });
     </script>
 </body>
