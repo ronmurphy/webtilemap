@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TileMap Studio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #app {
+            display: flex;
+            height: 100vh;
+        }
+        #toolbox {
+            width: 60px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #main-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .tool-button {
+            margin-bottom: 10px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .tool-button.active {
+            background-color: #e0e0e0;
+        }
+        #layer-panel {
+            width: 250px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .layer {
+            margin-bottom: 5px;
+            padding: 5px;
+            background-color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .active-layer {
+            background-color: #e0e0e0;
+        }
+        .layer-name {
+            flex-grow: 1;
+        }
+        .layer-visibility, .layer-lock {
+            cursor: pointer;
+        }
+        #sprite-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        .sprite-item {
+            display: inline-block;
+            margin: 5px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .sprite-item:hover {
+            transform: scale(1.1);
+        }
+        #spritesheet-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 1px solid black;
+            z-index: 1000;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        .context-menu-item {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+        .context-menu-item:hover {
+            background-color: #f0f0f0;
+        }
+        #spritesheet-container {
+            position: relative;
+            overflow: hidden;
+            max-width: 100%;
+            max-height: 70vh;
+        }
+        #spritesheet-img {
+            max-width: none;
+            max-height: none;
+        }
+        #torch-btn {
+            color: #FF4500;
+        }
+        #tile-chooser {
+    display: block !important;
+}
+#tile-chooser select {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+}
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="toolbox">
+            <i class="material-icons tool-button" title="Select Tool" data-tool="select">pan_tool_alt</i>
+            <i class="material-icons tool-button" title="Move Tool" data-tool="move">pan_tool</i>
+            <i class="material-icons tool-button" title="Marquee Tool" data-tool="marquee">crop_square</i>
+            <i class="material-icons tool-button" title="Brush Tool" data-tool="brush">brush</i>
+            <i class="material-icons tool-button" title="Eraser Tool" data-tool="eraser">remove_circle_outline</i>
+            <i class="material-icons tool-button" title="Fill Tool" data-tool="fill">format_color_fill</i>
+            <i class="material-icons tool-button" title="Text Tool" data-tool="text">text_fields</i>
+            <i class="material-icons tool-button" title="Eyedropper Tool" data-tool="eyedropper">colorize</i>
+            <i class="material-icons tool-button" title="Zoom Tool" data-tool="zoom">zoom_in</i>
+            <i class="material-icons tool-button" title="Hand Tool" data-tool="hand">pan_tool</i>
+            <i class="material-icons tool-button" title="Torch Tool" data-tool="torch" id="torch-btn">whatshot</i>
+            <i class="material-icons tool-button" title="Settings" id="settings-btn">settings</i>
+            <i class="material-icons tool-button" title="Help" id="help-btn">help_outline</i>
+        </div>
+        <div id="canvas-container">
+            <canvas id="main-canvas"></canvas>
+        </div>
+        <div id="layer-panel">
+            <button class="btn waves-effect waves-light" id="spritesheet-btn">Load Spritesheet</button>
+            <div id="sprite-list"></div>
+            <h6>Layers</h6>
+            <div id="layer-list"></div>
+            <button class="btn waves-effect waves-light" id="save-tilesheet-btn">Save Sliced Tilesheet</button>
+            <button class="btn waves-effect waves-light" id="load-tilesheet-btn">Load Sliced Tilesheet</button>
+            <button class="btn waves-effect waves-light" id="add-layer-btn">Add Layer</button>
+            <button class="btn waves-effect waves-light" id="save-btn">Save</button>
+            <button class="btn waves-effect waves-light" id="load-btn">Load</button>
+            
+        </div>
+    </div>
+
+    <div id="spritesheet-dialog">
+        <div id="spritesheet-container">
+            <img id="spritesheet-img">
+            <canvas id="spritesheet-grid"></canvas>
+        </div>
+        <div>
+            <label for="sprite-width">Sprite Width:</label>
+            <input type="number" id="sprite-width" min="1" value="32">
+            <label for="sprite-height">Sprite Height:</label>
+            <input type="number" id="sprite-height" min="1" value="32">
+        </div>
+        <div>
+            <label for="grid-offset-x">Grid Offset X:</label>
+            <input type="number" id="grid-offset-x" value="0">
+            <label for="grid-offset-y">Grid Offset Y:</label>
+            <input type="number" id="grid-offset-y" value="0">
+        </div>
+        <button id="spritesheet-ok" class="btn waves-effect waves-light">OK</button>
+    </div>
+
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <h4>TileMap Studio Help</h4>
+            <p>Welcome to TileMap Studio! Here's a quick guide to get you started:</p>
+            <ul>
+                <li><strong>Select Tool:</strong> Click to select and move tiles on the canvas.</li>
+                <li><strong>Move Tool:</strong> Click and drag to move the canvas view.</li>
+                <li><strong>Marquee Tool:</strong> Click and drag to select multiple tiles.</li>
+                <li><strong>Brush Tool:</strong> Click and drag to paint with the selected sprite.</li>
+                <li><strong>Eraser Tool:</strong> Click and drag to remove tiles.</li>
+                <li><strong>Fill Tool:</strong> Click to fill an area with the selected sprite.</li>
+                <li><strong>Text Tool:</strong> Click to add text to the canvas.</li>
+                <li><strong>Eyedropper Tool:</strong> Click to select a tile on the canvas.</li>
+                <li><strong>Zoom Tool:</strong> Click to zoom in, right-click to zoom out.</li>
+                <li><strong>Hand Tool:</strong> Click and drag to pan the canvas view.</li>
+                <li><strong>Torch Tool:</strong> Click to place a light source on the map.</li>
+                <li><strong>Settings:</strong> Adjust grid size and other options.</li>
+                <li><strong>Load Spritesheet:</strong> Import a spritesheet to use for tiles.</li>
+                <li><strong>Layers:</strong> Manage different layers of your map.</li>
+                <li><strong>Save/Load:</strong> Save your work or load a previous project.</li>
+            </ul>
+            <p>Double-click on a tile to open the context menu for additional options.</p>
+        </div>
+        <div class="modal-footer">
+            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('main-canvas');
+            const ctx = canvas.getContext('2d');
+            const layerList = document.getElementById('layer-list');
+            const spriteList = document.getElementById('sprite-list');
+            let layers = [
+    { name: 'Fog', color: 'grey', visible: false, locked: false, items: [] },
+    { name: 'Assets', color: 'yellow', visible: true, locked: false, items: [] },
+    { name: 'Tiles', color: 'black', visible: true, locked: false, items: [] },
+    { name: 'Background', color: 'green', visible: true, locked: false, items: [] },
+    { name: 'Blueprints', color: 'blue', visible: true, locked: false, items: [] }
+];
+            //let activeLayerIndex = 2;
+            let activeLayerIndex = 0; // This should be updated when the user changes the active layer
+            let activeTool = 'select';
+            let gridSize = 32;
+            let zoomLevel = 1;
+            let panOffset = { x: 0, y: 0 };
+            let sprites = [];
+            let activeSprite = null;
+            let selectedTile = null;
+            let isDragging = false;
+            let lastX, lastY;
+            let spritesheetZoom = 1;
+            let spritesheetPan = { x: 0, y: 0 };
+            let gridOffset = { x: 0, y: 0 };
+            let lightSources = [];
+            let JSZip; // We'll load this dynamically
+            let marqueeStart = null;
+            let marqueeEnd = null;
+            let selectedTiles = [];
+            let useOpacityForHiddenLayers = true; // Default to using opacity
+
+            addTooltips();
+            function resizeCanvas() {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+                redrawCanvas();
+            }
+
+            function redrawCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(panOffset.x, panOffset.y);
+    ctx.scale(zoomLevel, zoomLevel);
+
+    // Draw grid
+    drawGrid();
+
+    // Draw all layers and their items
+    layers.forEach((layer, index) => {
+        if (useOpacityForHiddenLayers || layer.visible) {
+            ctx.save();
+            if (!layer.visible) {
+                ctx.globalAlpha = 0.3; // 30% opacity for "hidden" layers
+            }
+            layer.items.forEach(item => {
+                ctx.drawImage(item.image, item.x, item.y);
+                
+                // Highlight the selected tile if there is one
+                if (selectedTile === item) {
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 2 / zoomLevel;
+                    ctx.strokeRect(item.x, item.y, item.image.width, item.image.height);
+                }
+            });
+            ctx.restore();
+        }
+    });
+
+    // Draw lighting effects if applicable
+    drawLighting();
+
+    // Draw marquee selection if active
+    if (marqueeStart && marqueeEnd) {
+        drawMarqueeSelection();
+    }
+
+    // Highlight selected tiles
+    highlightSelectedTiles();
+
+    ctx.restore();
+}
+
+function toggleVisibilityBehavior() {
+    useOpacityForHiddenLayers = !useOpacityForHiddenLayers;
+    redrawCanvas();
+}
+
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+function drawGrid() {
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+    ctx.lineWidth = 1 / zoomLevel;
+
+    const startX = Math.floor(-panOffset.x / zoomLevel / gridSize) * gridSize;
+    const startY = Math.floor(-panOffset.y / zoomLevel / gridSize) * gridSize;
+    const endX = startX + canvas.width / zoomLevel + gridSize;
+    const endY = startY + canvas.height / zoomLevel + gridSize;
+
+    for (let x = startX; x < endX; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.stroke();
+    }
+
+    for (let y = startY; y < endY; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+    }
+}
+
+            function drawLighting() {
+                const fogLayer = layers.find(layer => layer.name === 'Fog');
+                if (!fogLayer || !fogLayer.visible) return;
+
+                const fogCanvas = document.createElement('canvas');
+                fogCanvas.width = canvas.width / zoomLevel;
+                fogCanvas.height = canvas.height / zoomLevel;
+                const fogCtx = fogCanvas.getContext('2d');
+
+                // Fill with almost black color
+                fogCtx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+                fogCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
+
+                lightSources.forEach(light => {
+                    const radius = 10 * gridSize;
+                    const gradient = fogCtx.createRadialGradient(light.x, light.y, 0, light.x, light.y, radius);
+                    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                    fogCtx.globalCompositeOperation = 'destination-out';
+                    fogCtx.fillStyle = gradient;
+                    fogCtx.beginPath();
+                    fogCtx.arc(light.x, light.y, radius, 0, Math.PI * 2);
+                    fogCtx.fill();
+
+                    // Cast shadows
+                    for (let angle = 0; angle < Math.PI * 2; angle += 0.1) {
+                        castRay(fogCtx, light, angle, radius);
+                    }
+                    console.log('Sprites available:', sprites.length);
+console.log('Sprite list:', sprites);
+                });
+
+                ctx.drawImage(fogCanvas, 0, 0);
+            }
+
+            function castRay(fogCtx, light, angle, maxDistance) {
+    const rayX = Math.cos(angle);
+    const rayY = Math.sin(angle);
+    let distance = 0;
+
+    while (distance < maxDistance) {
+        const x = light.x + rayX * distance;
+        const y = light.y + rayY * distance;
+
+        if (isTileAtPosition(x, y)) {
+            // Draw shadow
+            fogCtx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            fogCtx.beginPath();
+            fogCtx.moveTo(light.x, light.y);
+            fogCtx.lineTo(x, y);
+            fogCtx.lineTo(x + rayX * (maxDistance - distance), y + rayY * (maxDistance - distance));
+            fogCtx.closePath();
+            fogCtx.fill();
+            break;
+        }
+
+        distance += gridSize / 2;
+    }
+}
+
+            function isTileAtPosition(x, y) {
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        if (layer.name === 'Fog') continue;
+        for (let j = 0; j < layer.items.length; j++) {
+            const item = layer.items[j];
+            if (x >= item.x && x < item.x + item.image.width &&
+                y >= item.y && y < item.y + item.image.height) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function updateLayerList() {
+    layerList.innerHTML = '';
+    layers.forEach((layer, index) => {
+        const layerDiv = document.createElement('div');
+        layerDiv.className = `layer ${index === activeLayerIndex ? 'active-layer' : ''}`;
+        layerDiv.innerHTML = `
+            <span class="layer-name" style="color: ${layer.color}">${layer.name}</span>
+            <i class="material-icons layer-visibility">${layer.visible ? 'visibility' : 'visibility_off'}</i>
+            <i class="material-icons layer-lock">${layer.locked ? 'lock' : 'lock_open'}</i>
+        `;
+        layerDiv.querySelector('.layer-name').addEventListener('click', () => setActiveLayer(index));
+        layerDiv.querySelector('.layer-visibility').addEventListener('click', () => toggleLayerVisibility(index));
+        layerDiv.querySelector('.layer-lock').addEventListener('click', () => toggleLayerLock(index));
+        layerList.appendChild(layerDiv);
+    });
+}
+
+            function setActiveLayer(index) {
+                activeLayerIndex = index;
+                updateLayerList();
+            }
+
+            function toggleLayerVisibility(index) {
+    layers[index].visible = !layers[index].visible;
+    updateLayerList();
+    redrawCanvas();
+}
+
+            function toggleLayerLock(index) {
+                layers[index].locked = !layers[index].locked;
+                updateLayerList();
+            }
+
+            function handleSpritesheet() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.getElementById('spritesheet-img');
+                        img.src = e.target.result;
+                        img.onload = function() {
+                            document.getElementById('spritesheet-dialog').style.display = 'block';
+                            spritesheetZoom = 1;
+                            spritesheetPan = { x: 0, y: 0 };
+                            gridOffset = { x: 0, y: 0 };
+                            updateSpritesheetView();
+                            drawSpritesheetGrid();
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                };
+                input.click();
+            }
+
+            function updateSpritesheetView() {
+                const img = document.getElementById('spritesheet-img');
+                img.style.transform = `scale(${spritesheetZoom}) translate(${spritesheetPan.x}px, ${spritesheetPan.y}px)`;
+            }
+
+            function drawSpritesheetGrid() {
+                const img = document.getElementById('spritesheet-img');
+                const canvas = document.getElementById('spritesheet-grid');
+                const ctx = canvas.getContext('2d');
+                const width = parseInt(document.getElementById('sprite-width').value);
+                const height = parseInt(document.getElementById('sprite-height').value);
+
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 1 / spritesheetZoom;
+
+                const offsetX = parseInt(document.getElementById('grid-offset-x').value) || 0;
+                const offsetY = parseInt(document.getElementById('grid-offset-y').value) || 0;
+
+                for (let x = offsetX; x < img.width; x += width) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, img.height);
+                    ctx.stroke();
+                }
+                for (let y = offsetY; y < img.height; y += height) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(img.width, y);
+                    ctx.stroke();
+                }
+            }
+
+            function sliceSpritesheet() {
+                const img = document.getElementById('spritesheet-img');
+                const width = parseInt(document.getElementById('sprite-width').value);
+                const height = parseInt(document.getElementById('sprite-height').value);
+                const offsetX = parseInt(document.getElementById('grid-offset-x').value) || 0;
+                const offsetY = parseInt(document.getElementById('grid-offset-y').value) || 0;
+                const filename = img.src.split('/').pop().split('.')[0].substring(0, 10);
+
+                sprites = [];
+                for (let y = offsetY; y < img.height; y += height) {
+                    for (let x = offsetX; x < img.width; x += width) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+                        sprites.push({
+                            name: `${filename}-${sprites.length}`,
+                            image: canvas
+                        });
+                    }
+                }
+
+                document.getElementById('spritesheet-dialog').style.display = 'none';
+                updateSpriteList();
+                updateTileChoosers();
+            }
+
+            function updateSpriteList() {
+                spriteList.innerHTML = '';
+                sprites.forEach((sprite, index) => {
+                    const spriteElement = document.createElement('div');
+                    spriteElement.className = 'sprite-item';
+                    spriteElement.innerHTML = `<img src="${sprite.image.toDataURL()}" title="${sprite.name}">`;
+                    spriteElement.addEventListener('click', () => {
+                        activeSprite = sprite;
+                        activeTool = 'brush';
+                        updateToolHighlight();
+                    });
+                    spriteList.appendChild(spriteElement);
+                });
+            }
+
+            function updateToolHighlight() {
+    document.querySelectorAll('.tool-button').forEach(button => {
+        button.classList.remove('active');
+        if (button.getAttribute('data-tool') === activeTool) {
+            button.classList.add('active');
+        }
+    });
+}
+
+            function snapToGrid(x, y) {
+                return {
+                    x: Math.round(x / gridSize) * gridSize,
+                    y: Math.round(y / gridSize) * gridSize
+                };
+            }
+
+            function getMousePos(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (event.clientX - rect.left - panOffset.x) / zoomLevel,
+        y: (event.clientY - rect.top - panOffset.y) / zoomLevel
+    };
+}
+            //brad
+            function saveTilesheet() {
+    if (!sprites.length) {
+        alert('No sprites to save. Please load and slice a spritesheet first.');
+        return;
+    }
+
+    const zip = new JSZip();
+    const infoFile = new Blob([JSON.stringify({
+        gridWidth: parseInt(document.getElementById('sprite-width').value),
+        gridHeight: parseInt(document.getElementById('sprite-height').value)
+    })], {type: 'application/json'});
+    zip.file('tilesheet_info.json', infoFile);
+
+    sprites.forEach((sprite, index) => {
+        zip.file(`sprite_${index}.png`, dataURLtoBlob(sprite.image.toDataURL()), {base64: true});
+    });
+
+    zip.generateAsync({type: 'blob'})
+        .then(function(content) {
+            const url = URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sliced_tilesheet.zip';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+}
+
+function addTooltips() {
+    const tooltips = {
+        'select': 'Select Tool',
+        'move': 'Move Tool',
+        'marquee': 'Marquee Tool',
+        'brush': 'Brush Tool',
+        'eraser': 'Eraser Tool',
+        'fill': 'Fill Tool',
+        'text': 'Text Tool',
+        'eyedropper': 'Eyedropper Tool',
+        'zoom': 'Zoom Tool',
+        'hand': 'Hand Tool',
+        'torch': 'Torch Tool',
+        'settings': 'Settings',
+        'help': 'Help'
+    };
+
+    document.querySelectorAll('.tool-button').forEach(button => {
+        const tool = button.getAttribute('data-tool');
+        if (tooltips[tool]) {
+            button.setAttribute('title', tooltips[tool]);
+        }
+    });
+}
+
+
+
+
+function loadTilesheet() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = function(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            JSZip.loadAsync(e.target.result).then(function(zip) {
+                zip.file('tilesheet_info.json').async('string').then(function(infoContent) {
+                    const info = JSON.parse(infoContent);
+                    document.getElementById('sprite-width').value = info.gridWidth;
+                    document.getElementById('sprite-height').value = info.gridHeight;
+                    gridSize = info.gridWidth; // Assuming square tiles
+                    
+                    sprites = [];
+                    const spritePromises = [];
+                    zip.forEach(function(relativePath, zipEntry) {
+                        if (relativePath.startsWith('sprite_') && relativePath.endsWith('.png')) {
+                            const promise = zipEntry.async('base64').then(function(content) {
+                                return new Promise((resolve) => {
+                                    const img = new Image();
+                                    img.onload = function() {
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = img.width;
+                                        canvas.height = img.height;
+                                        const ctx = canvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0);
+                                        sprites.push({
+                                            name: relativePath.split('.')[0],
+                                            image: canvas
+                                        });
+                                        resolve();
+                                    };
+                                    img.src = 'data:image/png;base64,' + content;
+                                });
+                            });
+                            spritePromises.push(promise);
+                        }
+                    });
+
+                    Promise.all(spritePromises).then(function() {
+                        updateSpriteList();
+                        redrawCanvas();
+                    });
+                });
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    };
+    input.click();
+}
+
+function dataURLtoBlob(dataurl) {
+    var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+        bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], {type:mime});
+}
+
+canvas.addEventListener('mousedown', function(event) {
+    const pos = getMousePos(event);
+    lastX = event.clientX;
+    lastY = event.clientY;
+    isDragging = true;
+
+    switch (activeTool) {
+        case 'eraser':
+            handleEraserTool(event);
+            break;
+        case 'brush':
+            if (activeSprite) {
+                const snappedPos = snapToGrid(pos.x, pos.y);
+                if (!isTileAtPosition(snappedPos.x, snappedPos.y)) {
+                    placeTile(snappedPos.x, snappedPos.y);
+                    redrawCanvas();
+                }
+            }
+            break;
+        case 'select':
+            selectedTile = findClickedTile(pos);
+            if (selectedTile) {
+                offsetX = pos.x - selectedTile.item.x;
+                offsetY = pos.y - selectedTile.item.y;
+            }
+            break;
+        case 'move':
+            panStartX = event.clientX - panOffset.x;
+            panStartY = event.clientY - panOffset.y;
+            break;
+        case 'marquee':
+            marqueeStart = pos;
+            marqueeEnd = pos;
+            selectedTiles = []; // Clear previous selection
+            break;
+        case 'fill':
+            if (activeSprite) {
+                floodFill(pos.x, pos.y);
+                break;
+            //floodFill(pos.x, pos.y);
+            //break;
+              //  // fillArea(pos);
+              //  // redrawCanvas();
+            }
+            break;
+        case 'eyedropper':
+            const pickedTile = findClickedTile(pos);
+            if (pickedTile) {
+                activeSprite = { image: pickedTile.item.image };
+                activeTool = 'brush'; // Switch to brush after picking a color
+                updateToolHighlight();
+            }
+            break;
+        case 'hand':
+            panStartX = event.clientX - panOffset.x;
+            panStartY = event.clientY - panOffset.y;
+            break;
+        case 'torch':
+            placeLightSource(pos);
+            redrawCanvas();
+            break;
+    }
+});canvas.addEventListener('mousemove', function(event) {
+    if (isDragging) {
+        const pos = getMousePos(event);
+        const deltaX = event.clientX - lastX;
+        const deltaY = event.clientY - lastY;
+
+        switch (activeTool) {
+            case 'eraser':
+                handleEraserTool(event);
+                break;
+            case 'brush':
+                if (activeSprite) {
+                    const snappedPos = snapToGrid(pos.x, pos.y);
+                    if (!isTileAtPosition(snappedPos.x, snappedPos.y)) {
+                        placeTile(snappedPos.x, snappedPos.y);
+                        redrawCanvas();
+                    }
+                }
+                break;
+            case 'select':
+                if (selectedTile) {
+                    selectedTile.item.x = pos.x - offsetX;
+                    selectedTile.item.y = pos.y - offsetY;
+                    redrawCanvas();
+                }
+                break;
+            case 'move':
+                panOffset.x = event.clientX - panStartX;
+                panOffset.y = event.clientY - panStartY;
+                redrawCanvas();
+                break;
+            case 'marquee':
+                marqueeEnd = pos;
+                redrawCanvas();
+                break;
+            case 'hand':
+                panOffset.x = event.clientX - panStartX;
+                panOffset.y = event.clientY - panStartY;
+                redrawCanvas();
+                break;
+        }
+
+        lastX = event.clientX;
+        lastY = event.clientY;
+    }
+});
+
+canvas.addEventListener('mouseup', function() {
+    isDragging = false;
+    if (activeTool === 'select' && selectedTile) {
+        const snappedPos = snapToGrid(selectedTile.item.x, selectedTile.item.y);
+        selectedTile.item.x = snappedPos.x;
+        selectedTile.item.y = snappedPos.y;
+        redrawCanvas();
+    } else if (activeTool === 'marquee') {
+        handleMarqueeSelection();
+    }
+});
+
+canvas.addEventListener('dblclick', function(event) {
+    const pos = getMousePos(event);
+    const clickedTile = findClickedTile(pos);
+    
+    if (clickedTile) {
+        showContextMenu(event.clientX, event.clientY, clickedTile);
+    }
+});
+
+canvas.addEventListener('click', function(event) {
+    if (activeTool === 'fill') {
+        const pos = getMousePos(event);
+        floodFill(pos.x, pos.y);
+    }
+});
+
+function floodFill(startX, startY) {
+    if (!activeSprite) {
+        console.log("No active sprite selected for flood fill");
+        return;
+    }
+
+    const targetLayer = layers[activeLayerIndex];
+    if (!targetLayer) {
+        console.log("Target layer for flood fill not found");
+        return;
+    }
+
+    const startPos = snapToGrid(startX, startY);
+    const startTile = findClickedTile({ x: startPos.x, y: startPos.y });
+
+    if (startTile && startTile.layerIndex !== activeLayerIndex) {
+        console.log("Flood fill can only be applied to the active layer");
+        return;
+    }
+
+    const isUnrestrictedLayer = targetLayer.name === 'Background' || targetLayer.name === 'Blueprints';
+    const visited = new Set();
+    const toFill = [[startPos.x, startPos.y]];
+    const originalTileImage = startTile ? startTile.item.image : null;
+
+    // Calculate visible area boundaries
+    const visibleBounds = getVisibleBounds();
+
+    while (toFill.length > 0) {
+        const [x, y] = toFill.pop();
+        const key = `${x},${y}`;
+
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        // Check if the current position is within the visible bounds
+        if (!isWithinBounds(x, y, visibleBounds)) continue;
+
+        if (!isUnrestrictedLayer && !isInMarqueeSelection(x, y)) continue;
+
+        const currentTile = findClickedTileInLayer({ x, y }, activeLayerIndex);
+        if (currentTile && currentTile.image !== originalTileImage) continue;
+
+        // Place new tile
+        placeTile(x, y, activeLayerIndex);
+
+        // Check neighboring tiles
+        [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(([dx, dy]) => {
+            const newX = x + dx * gridSize;
+            const newY = y + dy * gridSize;
+            toFill.push([newX, newY]);
+        });
+    }
+
+    redrawCanvas();
+}
+
+function getVisibleBounds() {
+    const canvasRect = canvas.getBoundingClientRect();
+    const topLeft = getMousePos({ clientX: canvasRect.left, clientY: canvasRect.top });
+    const bottomRight = getMousePos({ clientX: canvasRect.right, clientY: canvasRect.bottom });
+
+    return {
+        left: Math.floor(topLeft.x / gridSize) * gridSize,
+        top: Math.floor(topLeft.y / gridSize) * gridSize,
+        right: Math.ceil(bottomRight.x / gridSize) * gridSize,
+        bottom: Math.ceil(bottomRight.y / gridSize) * gridSize
+    };
+}
+
+function isWithinBounds(x, y, bounds) {
+    return x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom;
+}
+
+
+function findClickedTileInLayer(pos, layerIndex) {
+    const layer = layers[layerIndex];
+    return layer.items.find(item => 
+        pos.x >= item.x && pos.x < item.x + item.image.width &&
+        pos.y >= item.y && pos.y < item.y + item.image.height
+    );
+}
+
+function isInMarqueeSelection(x, y) {
+    if (!marqueeStart || !marqueeEnd || selectedTiles.length === 0) return true;
+
+    const startX = Math.min(marqueeStart.x, marqueeEnd.x);
+    const startY = Math.min(marqueeStart.y, marqueeEnd.y);
+    const endX = Math.max(marqueeStart.x, marqueeEnd.x);
+    const endY = Math.max(marqueeStart.y, marqueeEnd.y);
+
+    return x >= startX && x < endX && y >= startY && y < endY;
+}
+
+function placeTile(x, y, layerIndex) {
+    const layer = layers[layerIndex];
+    const existingTileIndex = layer.items.findIndex(item => item.x === x && item.y === y);
+
+    if (existingTileIndex !== -1) {
+        layer.items[existingTileIndex] = { x, y, image: activeSprite.image };
+    } else {
+        layer.items.push({ x, y, image: activeSprite.image });
+    }
+}
+
+function drawMarqueeSelection() {
+    if (!marqueeStart || !marqueeEnd) return;
+
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 2 / zoomLevel;
+    ctx.beginPath();
+    
+    const startX = Math.min(marqueeStart.x, marqueeEnd.x);
+    const startY = Math.min(marqueeStart.y, marqueeEnd.y);
+    const width = Math.abs(marqueeEnd.x - marqueeStart.x);
+    const height = Math.abs(marqueeEnd.y - marqueeStart.y);
+    
+    ctx.rect(startX, startY, width, height);
+    ctx.stroke();
+    ctx.restore();
+}
+
+// Implement handleMarqueeSelection function
+function handleMarqueeSelection() {
+    if (!marqueeStart || !marqueeEnd) return;
+
+    selectedTiles = [];
+    const startX = Math.min(marqueeStart.x, marqueeEnd.x);
+    const startY = Math.min(marqueeStart.y, marqueeEnd.y);
+    const endX = Math.max(marqueeStart.x, marqueeEnd.x);
+    const endY = Math.max(marqueeStart.y, marqueeEnd.y);
+
+    layers.forEach((layer, layerIndex) => {
+        if (layer.visible && !layer.locked) {
+            layer.items.forEach(tile => {
+                if (tile.x >= startX && tile.x < endX && tile.y >= startY && tile.y < endY) {
+                    selectedTiles.push({ layerIndex, tile });
+                }
+            });
+        }
+    });
+
+    console.log(`Selected ${selectedTiles.length} tiles`);
+    marqueeStart = null;
+    marqueeEnd = null;
+    redrawCanvas();
+    highlightSelectedTiles();
+}
+
+function highlightSelectedTiles() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 2 / zoomLevel;
+    selectedTiles.forEach(({ tile }) => {
+        ctx.strokeRect(tile.x, tile.y, tile.image.width, tile.image.height);
+    });
+    ctx.restore();
+}
+function isTileAtPosition(x, y) {
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        if (layer.visible && !layer.locked) {
+            for (let j = 0; j < layer.items.length; j++) {
+                const item = layer.items[j];
+                if (x === item.x && y === item.y) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+
+function handleEraserTool(event) {
+    const pos = getMousePos(event);
+    const snappedPos = snapToGrid(pos.x, pos.y);
+    const tileToDelete = findClickedTileInLayer(snappedPos, activeLayerIndex);
+    
+    if (tileToDelete) {
+        deleteTile(activeLayerIndex, tileToDelete);
+        redrawCanvas();
+    }
+}
+
+function placeTile(x, y) {
+    layers[activeLayerIndex].items.push({
+        image: activeSprite.image,
+        x: x,
+        y: y
+    });
+    redrawCanvas();
+}
+
+function findClickedTile(pos) {
+    const snappedPos = snapToGrid(pos.x, pos.y);
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        if (layer.visible && !layer.locked) {
+            for (let j = layer.items.length - 1; j >= 0; j--) {
+                const item = layer.items[j];
+                if (snappedPos.x === item.x && snappedPos.y === item.y) {
+                    return { item: item, layerIndex: i };
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function showContextMenu(x, y, clickedTile) {
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'context-menu';
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+
+    const actions = ['Rotate', 'Flip Horizontal', 'Flip Vertical', 'Delete'];
+    actions.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'context-menu-item';
+        item.textContent = action;
+        item.addEventListener('click', () => {
+            switch(action) {
+                case 'Rotate':
+                    rotateTile(clickedTile.item);
+                    break;
+                case 'Flip Horizontal':
+                    flipTileHorizontal(clickedTile.item);
+                    break;
+                case 'Flip Vertical':
+                    flipTileVertical(clickedTile.item);
+                    break;
+                case 'Delete':
+                    deleteTile(clickedTile.layerIndex, clickedTile.item);
+                    break;
+            }
+            contextMenu.remove();
+            redrawCanvas();
+        });
+        contextMenu.appendChild(item);
+    });
+
+    document.body.appendChild(contextMenu);
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function closeMenu(e) {
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.remove();
+            document.removeEventListener('click', closeMenu);
+        }
+    });
+}
+
+function rotateTile(tile) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tile.image.height;
+    tempCanvas.height = tile.image.width;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+    tempCtx.rotate(Math.PI / 2);
+    tempCtx.drawImage(tile.image, -tile.image.width / 2, -tile.image.height / 2);
+    tile.image = tempCanvas;
+}
+
+function flipTileHorizontal(tile) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tile.image.width;
+    tempCanvas.height = tile.image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.scale(-1, 1);
+    tempCtx.drawImage(tile.image, -tile.image.width, 0);
+    tile.image = tempCanvas;
+}
+
+function flipTileVertical(tile) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tile.image.width;
+    tempCanvas.height = tile.image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.scale(1, -1);
+    tempCtx.drawImage(tile.image, 0, -tile.image.height);
+    tile.image = tempCanvas;
+}
+
+function deleteTile(layerIndex, tile) {
+    const layer = layers[layerIndex];
+    const index = layer.items.findIndex(item => item.x === tile.x && item.y === tile.y);
+    if (index !== -1) {
+        layer.items.splice(index, 1);
+        console.log(`Tile deleted from layer ${layerIndex}`);
+        if (selectedTile === tile) {
+            selectedTile = null;
+        }
+    } else {
+        console.log(`Tile not found in layer ${layerIndex}`);
+    }
+}
+
+            canvas.addEventListener('wheel', function(event) {
+                event.preventDefault();
+                const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+                const mouseX = event.clientX - canvas.offsetLeft;
+                const mouseY = event.clientY - canvas.offsetTop;
+                
+                zoomLevel *= zoomFactor;
+                zoomLevel *= zoomFactor;
+                zoomLevel = Math.min(Math.max(zoomLevel, 0.1), 10);
+
+                panOffset.x = mouseX - (mouseX - panOffset.x) * zoomFactor;
+                panOffset.y = mouseY - (mouseY - panOffset.y) * zoomFactor;
+
+                redrawCanvas();
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('wheel', function(event) {
+                event.preventDefault();
+                const rect = this.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+
+                const zoom = event.deltaY > 0 ? 0.9 : 1.1;
+                spritesheetZoom *= zoom;
+
+                spritesheetPan.x = mouseX - (mouseX - spritesheetPan.x) * zoom;
+                spritesheetPan.y = mouseY - (mouseY - spritesheetPan.y) * zoom;
+
+                updateSpritesheetView();
+                drawSpritesheetGrid();
+            });
+
+            let isDraggingSpritesheet = false;
+            let lastSpritesheetX, lastSpritesheetY;
+
+            document.getElementById('spritesheet-container').addEventListener('mousedown', function(event) {
+                isDraggingSpritesheet = true;
+                lastSpritesheetX = event.clientX;
+                lastSpritesheetY = event.clientY;
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('mousemove', function(event) {
+                if (isDraggingSpritesheet) {
+                    const deltaX = event.clientX - lastSpritesheetX;
+                    const deltaY = event.clientY - lastSpritesheetY;
+                    spritesheetPan.x += deltaX / spritesheetZoom;
+                    spritesheetPan.y += deltaY / spritesheetZoom;
+                    lastSpritesheetX = event.clientX;
+                    lastSpritesheetY = event.clientY;
+                    updateSpritesheetView();
+                    drawSpritesheetGrid();
+                }
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('mouseup', function() {
+                isDraggingSpritesheet = false;
+            });
+
+            document.getElementById('spritesheet-container').addEventListener('mouseleave', function() {
+                isDraggingSpritesheet = false;
+            });
+
+            document.querySelectorAll('.tool-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    activeTool = this.getAttribute('data-tool');
+                    updateToolHighlight();
+                });
+            });
+
+            document.getElementById('settings-btn').addEventListener('click', showSettingsModal);
+            
+            // document.getElementById('settings-btn').addEventListener('click', function() {
+            //     const settingsHtml = `
+            //         <div id="settings-modal" class="modal">
+            //             <div class="modal-content">
+            //                 <h4>Grid Settings</h4>
+            //                 <div>
+            //                     <label for="grid-size">Grid Size:</label>
+            //                     <input type="number" id="grid-size" value="${gridSize}" min="1">
+            //                 </div>
+            //             </div>
+            //             <div class="modal-footer">
+            //                 <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+            //                 <a href="#!" class="modal-close waves-effect waves-green btn-flat" id="save-settings">Save</a>
+            //             </div>
+            //         </div>
+            //     `;
+                
+            //     const settingsElement = document.createElement('div');
+            //     settingsElement.innerHTML = settingsHtml;
+            //     document.body.appendChild(settingsElement);
+
+            //     const settingsModal = M.Modal.init(document.getElementById('settings-modal'));
+            //     settingsModal.open();
+
+            //     document.getElementById('save-settings').addEventListener('click', function() {
+            //         gridSize = parseInt(document.getElementById('grid-size').value);
+            //         redrawCanvas();
+            //     });
+            // });
+
+            document.getElementById('help-btn').addEventListener('click', function() {
+                const helpModal = M.Modal.init(document.getElementById('help-modal'));
+                helpModal.open();
+            });
+
+            document.getElementById('spritesheet-btn').addEventListener('click', handleSpritesheet);
+            document.getElementById('sprite-width').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('sprite-height').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('grid-offset-x').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('grid-offset-y').addEventListener('change', drawSpritesheetGrid);
+            document.getElementById('spritesheet-ok').addEventListener('click', sliceSpritesheet);
+            document.getElementById('add-layer-btn').addEventListener('click', addNewLayer); 
+            //     const name = prompt('Enter layer name:');
+            //     if (name) {
+            //         layers.push({ name, color: 'white', visible: true, locked: false, items: [] });
+            //         updateLayerList();
+            //     }
+            // });
+
+            document.getElementById('add-layer-btn').addEventListener('click', addNewLayer);
+
+            document.getElementById('save-btn').addEventListener('click', function() {
+                const mapData = {
+                    layers: layers,
+                    gridSize: gridSize,
+                    zoomLevel: zoomLevel,
+                    panOffset: panOffset,
+                    lightSources: lightSources
+                };
+                const mapDataString = JSON.stringify(mapData);
+                const blob = new Blob([mapDataString], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'map.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+            document.getElementById('load-btn').addEventListener('click', function() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const mapData = JSON.parse(e.target.result);
+                        layers = mapData.layers;
+                        gridSize = mapData.gridSize;
+                        zoomLevel = mapData.zoomLevel;
+                        panOffset = mapData.panOffset;
+                        lightSources = mapData.lightSources || [];
+                        updateLayerList();
+                        redrawCanvas();
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+            //brad 2
+
+
+            
+            document.getElementById('save-tilesheet-btn').addEventListener('click', saveTilesheet);
+document.getElementById('load-tilesheet-btn').addEventListener('click', loadTilesheet);
+
+// Load JSZip library dynamically
+const script = document.createElement('script');
+script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js';
+script.onload = function() {
+    JSZip = window.JSZip;
+};
+document.head.appendChild(script);
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            updateLayerList();
+            updateToolHighlight();
+             // Add the new button to the toolbox
+             const dungeonBtn = document.createElement('i');
+dungeonBtn.className = 'material-icons tool-button';
+dungeonBtn.title = 'Generate Dungeon';
+dungeonBtn.textContent = 'door_front'; // Changed to door_front
+dungeonBtn.style.color = 'black'; // Set the color to black
+dungeonBtn.addEventListener('click', openDungeonDialog);
+toolbox.appendChild(dungeonBtn);
+
+function showSettingsModal() {
+    const settingsHtml = `
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <h4>Settings</h4>
+                <div>
+                    <label for="grid-size">Grid Size:</label>
+                    <input type="number" id="grid-size" value="${gridSize}" min="1">
+                </div>
+                <div>
+                    <label>
+                        <input type="checkbox" id="visibility-behavior" ${useOpacityForHiddenLayers ? 'checked' : ''}>
+                        Use opacity for hidden layers
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat" id="save-settings">Save</a>
+            </div>
+        </div>
+    `;
+    
+    const settingsElement = document.createElement('div');
+    settingsElement.innerHTML = settingsHtml;
+    document.body.appendChild(settingsElement);
+
+    const settingsModal = M.Modal.init(document.getElementById('settings-modal'));
+    settingsModal.open();
+
+    document.getElementById('save-settings').addEventListener('click', function() {
+        gridSize = parseInt(document.getElementById('grid-size').value);
+        useOpacityForHiddenLayers = document.getElementById('visibility-behavior').checked;
+        redrawCanvas();
+    });
+}
+
+function addNewLayer() {
+    const name = prompt('Enter layer name:');
+    if (name) {
+        const color = getRandomColor();
+        layers.push({ name, color, visible: true, locked: false, items: [] });
+        updateLayerList();
+    }
+}
+
+function openDungeonDialog() {
+    const dialogHtml = `
+        <div id="dungeon-dialog" class="modal">
+            <div class="modal-content">
+                <h4>Generate Dungeon</h4>
+                <div class="input-field">
+                    <input type="number" id="dungeon-width" value="20" min="10" max="100">
+                    <label for="dungeon-width">Dungeon Width (in tiles)</label>
+                </div>
+                <div class="input-field">
+                    <input type="number" id="dungeon-height" value="20" min="10" max="100">
+                    <label for="dungeon-height">Dungeon Height (in tiles)</label>
+                </div>
+                <div class="input-field">
+                    <input type="number" id="room-count" value="5" min="1" max="20">
+                    <label for="room-count">Number of Rooms</label>
+                </div>
+                <div id="tile-chooser">
+                    <h5>Choose Tiles</h5>
+                    <div class="tile-selector-row">
+                        <div class="tile-selector">
+                            <label>Floor Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="floor-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="tile-selector">
+                            <label>Wall Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="wall-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="tile-selector">
+                            <label>Door Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="door-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="tile-selector">
+                            <label>Corridor Tile</label>
+                            <div class="tile-carousel">
+                                <button class="prev-tile">&lt;</button>
+                                <div id="corridor-tile-preview" class="tile-preview"></div>
+                                <button class="next-tile">&gt;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+                <a href="#!" class="waves-effect waves-green btn-flat" id="generate-dungeon">Generate</a>
+            </div>
+        </div>
+    `;
+    
+    const dialogElement = document.createElement('div');
+    dialogElement.innerHTML = dialogHtml;
+    document.body.appendChild(dialogElement);
+
+    // Add styles for tile previews and carousel
+    const style = document.createElement('style');
+    style.textContent = `
+        #dungeon-dialog .modal-content {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .tile-selector-row {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .tile-selector {
+            flex: 1 1 auto;
+            min-width: 120px;
+            margin: 0 10px 20px;
+            text-align: center;
+        }
+        .tile-carousel {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .tile-preview {
+            width: 64px;
+            height: 64px;
+            border: 1px solid #ccc;
+            margin: 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .tile-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            image-rendering: pixelated;
+        }
+        .prev-tile, .next-tile {
+            background: #f0f0f0;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        @media (max-width: 600px) {
+            .tile-selector {
+                flex-basis: 100%;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    const dungeonDialog = M.Modal.init(document.getElementById('dungeon-dialog'), {
+        dismissible: false, // Prevent closing by clicking outside
+        endingTop: '10%', // Position the modal a bit higher
+    });
+    
+    initTileCarousels();
+    
+    dungeonDialog.open();
+
+    document.getElementById('generate-dungeon').addEventListener('click', generateDungeon);
+}
+
+function initTileCarousels() {
+    const tileTypes = ['floor', 'wall', 'door', 'corridor'];
+    tileTypes.forEach(type => {
+        const preview = document.getElementById(`${type}-tile-preview`);
+        const prevBtn = preview.parentElement.querySelector('.prev-tile');
+        const nextBtn = preview.parentElement.querySelector('.next-tile');
+        let currentIndex = 0;
+
+        function updatePreview() {
+            if (sprites.length > 0) {
+                const sprite = sprites[currentIndex];
+                preview.innerHTML = `<img src="${sprite.image.toDataURL()}" alt="${sprite.name || `Sprite ${currentIndex}`}">`;
+                preview.dataset.spriteIndex = currentIndex;
+            } else {
+                preview.innerHTML = 'No sprites available';
+            }
+        }
+
+        prevBtn.addEventListener('click', () => {
+            currentIndex = (currentIndex - 1 + sprites.length) % sprites.length;
+            updatePreview();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            currentIndex = (currentIndex + 1) % sprites.length;
+            updatePreview();
+        });
+
+        updatePreview();
+    });
+}
+
+function populateTileChoosers() {
+    const tileSelects = ['floor-tile', 'wall-tile', 'door-tile', 'corridor-tile'];
+    tileSelects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (!select) {
+            console.error(`Select element with id "${selectId}" not found`);
+            return;
+        }
+        select.innerHTML = '';
+        if (sprites.length === 0) {
+            console.warn('No sprites available for tile chooser');
+            const option = document.createElement('option');
+            option.textContent = 'No sprites available';
+            select.appendChild(option);
+        } else {
+            sprites.forEach((sprite, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = sprite.name || `Sprite ${index}`;
+                select.appendChild(option);
+            });
+        }
+
+        // Add change event listener to update preview
+        select.addEventListener('change', (event) => {
+            const selectedIndex = event.target.value;
+            const selectedSprite = sprites[selectedIndex];
+            const previewContainer = document.createElement('div');
+            previewContainer.innerHTML = `<strong>Selected ${selectId.replace('-tile', '')} tile:</strong><br>`;
+            const preview = document.createElement('img');
+            preview.src = selectedSprite.image.toDataURL();
+            preview.style.width = '64px';
+            preview.style.height = '64px';
+            preview.style.imageRendering = 'pixelated';
+            previewContainer.appendChild(preview);
+            
+            const existingPreview = select.parentNode.querySelector('.tile-preview-container');
+            if (existingPreview) {
+                existingPreview.remove();
+            }
+            previewContainer.classList.add('tile-preview-container');
+            select.parentNode.appendChild(previewContainer);
+        });
+    });
+
+    // Initialize Materialize select
+    M.FormSelect.init(document.querySelectorAll('select'));
+
+    console.log('Tile choosers populated:', sprites.length, 'sprites available');
+}
+
+function updateTileChoosers() {
+    const dungeonDialog = document.getElementById('dungeon-dialog');
+    if (dungeonDialog) {
+        initTileCarousels();
+    }
+}
+function generateDungeon() {
+    const width = parseInt(document.getElementById('dungeon-width').value);
+    const height = parseInt(document.getElementById('dungeon-height').value);
+    const roomCount = parseInt(document.getElementById('room-count').value);
+    const floorTile = sprites[document.getElementById('floor-tile-preview').dataset.spriteIndex];
+    const wallTile = sprites[document.getElementById('wall-tile-preview').dataset.spriteIndex];
+    const doorTile = sprites[document.getElementById('door-tile-preview').dataset.spriteIndex];
+    const corridorTile = sprites[document.getElementById('corridor-tile-preview').dataset.spriteIndex];
+
+                // Create a 2D array to represent the dungeon
+                const dungeon = Array(height).fill().map(() => Array(width).fill(0));
+
+                // Generate rooms
+                const rooms = [];
+                for (let i = 0; i < roomCount; i++) {
+                    const roomWidth = Math.floor(Math.random() * 5) + 5;
+                    const roomHeight = Math.floor(Math.random() * 5) + 5;
+                    const x = Math.floor(Math.random() * (width - roomWidth - 2)) + 1;
+                    const y = Math.floor(Math.random() * (height - roomHeight - 2)) + 1;
+                    
+                    rooms.push({x, y, width: roomWidth, height: roomHeight});
+                    
+                    // Fill room with floor tiles
+                    for (let dy = 0; dy < roomHeight; dy++) {
+                        for (let dx = 0; dx < roomWidth; dx++) {
+                            dungeon[y + dy][x + dx] = 1;
+                        }
+                    }
+                }
+
+                // Connect rooms with corridors
+                for (let i = 0; i < rooms.length - 1; i++) {
+                    const roomA = rooms[i];
+                    const roomB = rooms[i + 1];
+                    const pointA = {x: roomA.x + Math.floor(roomA.width / 2), y: roomA.y + Math.floor(roomA.height / 2)};
+                    const pointB = {x: roomB.x + Math.floor(roomB.width / 2), y: roomB.y + Math.floor(roomB.height / 2)};
+                    
+                    // Create L-shaped corridor
+                    while (pointA.x !== pointB.x) {
+                        dungeon[pointA.y][pointA.x] = 2;
+                        pointA.x += pointA.x < pointB.x ? 1 : -1;
+                    }
+                    while (pointA.y !== pointB.y) {
+                        dungeon[pointA.y][pointA.x] = 2;
+                        pointA.y += pointA.y < pointB.y ? 1 : -1;
+                    }
+                }
+
+                // Add walls around rooms and corridors
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        if (dungeon[y][x] === 0 && hasAdjacentFloor(dungeon, x, y)) {
+                            dungeon[y][x] = 3;
+                        }
+                    }
+                }
+
+                // Place dungeon on the canvas
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let tile;
+                        switch (dungeon[y][x]) {
+                            case 1: tile = floorTile; break;
+                            case 2: tile = corridorTile; break;
+                            case 3: tile = wallTile; break;
+                            default: continue;
+                        }
+                        layers[activeLayerIndex].items.push({
+                            image: tile.image,
+                            x: x * gridSize,
+                            y: y * gridSize
+                        });
+                    }
+                }
+
+                // Place doors
+                rooms.forEach(room => {
+                    const doorX = room.x + Math.floor(room.width / 2);
+                    const doorY = room.y + room.height - 1;
+                    if (doorY < height - 1 && dungeon[doorY + 1][doorX] === 2) {
+                        layers[activeLayerIndex].items.push({
+                            image: doorTile.image,
+                            x: doorX * gridSize,
+                            y: doorY * gridSize
+                        });
+                    }
+                });
+
+                redrawCanvas();
+                M.Modal.getInstance(document.getElementById('dungeon-dialog')).close();
+            }
+
+            function hasAdjacentFloor(dungeon, x, y) {
+                const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                return directions.some(([dx, dy]) => {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    return nx >= 0 && nx < dungeon[0].length && ny >= 0 && ny < dungeon.length && (dungeon[ny][nx] === 1 || dungeon[ny][nx] === 2);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
