@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TileMap Studio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        main {
+            flex: 1 0 auto;
+            display: flex;
+        }
+        #app {
+            display: flex;
+            width: 100%;
+            height: calc(100vh - 64px);
+        }
+        #toolbox {
+            width: 60px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+        }
+        #toolbox i {
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        #canvas-container {
+            flex-grow: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        #tileMapCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #layer-panel {
+            width: 300px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            overflow-y: auto;
+        }
+        .layer-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px;
+            margin-bottom: 5px;
+            background-color: #fff;
+            border-radius: 2px;
+        }
+        .layer-item.active {
+            background-color: #e0e0e0;
+        }
+        #spritesheet-tabs {
+            margin-bottom: 10px;
+        }
+        .spritesheet-preview {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+        }
+        .sprite-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+            gap: 2px;
+            margin-bottom: 10px;
+        }
+        .sprite-item {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+        }
+        .sprite-item.selected {
+            border: 2px solid #26a69a;
+        }
+        .dungeon-tile-select {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .dungeon-tile-select .sprite-item {
+            width: 48px;
+            height: 48px;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-wrapper">
+            <a href="#" class="brand-logo center">TileMap Studio</a>
+        </div>
+    </nav>
+
+    <main>
+        <div id="app">
+            <div id="toolbox">
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Select Tool">pan_tool</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Move Tool">open_with</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Marquee Tool">crop_square</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Brush Tool">brush</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Eraser Tool">remove_circle_outline</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Fill Tool">format_color_fill</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Text Tool">text_fields</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Eyedropper Tool">colorize</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Zoom Tool">zoom_in</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Hand Tool">pan_tool</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Torch Tool">whatshot</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Dungeon Generator">door_front</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Settings">settings</i>
+                <i class="material-icons tooltipped" data-position="right" data-tooltip="Help">help_outline</i>
+            </div>
+
+            <div id="canvas-container">
+                <canvas id="tileMapCanvas"></canvas>
+            </div>
+
+            <div id="layer-panel">
+                <ul id="spritesheet-tabs" class="tabs">
+                    <li class="tab"><a href="#tiles-tab">Tiles</a></li>
+                    <li class="tab"><a href="#monsters-tab">Monsters</a></li>
+                    <li class="tab"><a href="#assets-tab">Assets</a></li>
+                </ul>
+
+                <div id="tiles-tab">
+                    <button class="btn waves-effect waves-light" id="loadTileSpritesheet">
+                        Load Tile Spritesheet
+                        <i class="material-icons right">file_upload</i>
+                    </button>
+                    <button class="btn waves-effect waves-light" id="previewTiles">
+                        Preview
+                        <i class="material-icons right">visibility</i>
+                    </button>
+                    <div id="tile-spritesheet-preview" class="spritesheet-preview"></div>
+                    <div id="tiles-sprite-grid" class="sprite-grid"></div>
+                </div>
+
+                <div id="monsters-tab">
+                    <button class="btn waves-effect waves-light" id="loadMonsterSpritesheet">
+                        Load Monster Spritesheet
+                        <i class="material-icons right">file_upload</i>
+                    </button>
+                    <button class="btn waves-effect waves-light" id="previewMonsters">
+                        Preview
+                        <i class="material-icons right">visibility</i>
+                    </button>
+                    <div id="monster-spritesheet-preview" class="spritesheet-preview"></div>
+                    <div id="monsters-sprite-grid" class="sprite-grid"></div>
+                </div>
+
+                <div id="assets-tab">
+                    <button class="btn waves-effect waves-light" id="loadAssetSpritesheet">
+                        Load Asset Spritesheet
+                        <i class="material-icons right">file_upload</i>
+                    </button>
+                    <button class="btn waves-effect waves-light" id="previewAssets">
+                        Preview
+                        <i class="material-icons right">visibility</i>
+                    </button>
+                    <div id="asset-spritesheet-preview" class="spritesheet-preview"></div>
+                    <div id="assets-sprite-grid" class="sprite-grid"></div>
+                </div>
+
+                <h6>Layers</h6>
+                <div id="layer-list"></div>
+                
+                <button class="btn waves-effect waves-light" id="addLayer">
+                    Add Layer
+                    <i class="material-icons right">add</i>
+                </button>
+                
+                <button class="btn waves-effect waves-light" id="saveMap">
+                    Save
+                    <i class="material-icons right">save</i>
+                </button>
+                
+                <button class="btn waves-effect waves-light" id="loadMap">
+                    Load
+                    <i class="material-icons right">folder_open</i>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Spritesheet Dialog -->
+    <div id="spritesheet-dialog" class="modal">
+        <div class="modal-content">
+            <h4>Sprite Slicer</h4>
+            <div id="spritesheet-container">
+                <canvas id="spritesheet-canvas"></canvas>
+            </div>
+            <div class="row">
+                <div class="input-field col s6">
+                    <input id="spriteWidth" type="number" class="validate" value="32">
+                    <label for="spriteWidth">Sprite Width</label>
+                </div>
+                <div class="input-field col s6">
+                    <input id="spriteHeight" type="number" class="validate" value="32">
+                    <label for="spriteHeight">Sprite Height</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="input-field col s6">
+                    <input id="gridOffsetX" type="number" class="validate" value="0">
+                    <label for="gridOffsetX">Grid Offset X</label>
+                </div>
+                <div class="input-field col s6">
+                    <input id="gridOffsetY" type="number" class="validate" value="0">
+                    <label for="gridOffsetY">Grid Offset Y</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="input-field col s6">
+                    <input id="spritesheetScale" type="number" class="validate" value="1" min="0.1" max="5" step="0.1">
+                    <label for="spritesheetScale">Scale</label>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+            <a href="#!" id="spritesheetOk" class="waves-effect waves-green btn-flat">OK</a>
+        </div>
+    </div>
+
+    <!-- Dungeon Generator Dialog -->
+    <div id="dungeon-generator-dialog" class="modal">
+        <div class="modal-content">
+            <h4>Dungeon Generator</h4>
+            <div class="row">
+                <div class="input-field col s6">
+                    <input id="dungeonWidth" type="number" class="validate" value="20">
+                    <label for="dungeonWidth">Dungeon Width (tiles)</label>
+                </div>
+                <div class="input-field col s6">
+                    <input id="dungeonHeight" type="number" class="validate" value="20">
+                    <label for="dungeonHeight">Dungeon Height (tiles)</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="input-field col s6">
+                    <input id="numRooms" type="number" class="validate" value="5">
+                    <label for="numRooms">Number of Rooms</label>
+                </div>
+            </div>
+            <h6>Select Tiles:</h6>
+            <div class="dungeon-tile-select">
+                <div>
+                    <p>Floor</p>
+                    <div id="floorTile" class="sprite-item"></div>
+                </div>
+                <div>
+                    <p>Wall</p>
+                    <div id="wallTile" class="sprite-item"></div>
+                </div>
+                <div>
+                    <p>Door</p>
+                    <div id="doorTile" class="sprite-item"></div>
+                </div>
+                <div>
+                    <p>Corridor</p>
+                    <div id="corridorTile" class="sprite-item"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+            <a href="#!" id="generateDungeon" class="waves-effect waves-green btn-flat">Generate</a>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <h4>TileMap Studio Help</h4>
+            <p>Welcome to TileMap Studio! Here's a quick guide to get you started:</p>
+            <ul class="browser-default">
+                <li><strong>Select Tool:</strong> Click to select and move tiles on the canvas.</li>
+                <li><strong>Move Tool:</strong> Click and drag to move the canvas view.</li>
+                <li><strong>Marquee Tool:</strong> Click and drag to select multiple tiles.</li>
+                <li><strong>Brush Tool:</strong> Click and drag to paint with the selected sprite.</li>
+                <li><strong>Eraser Tool:</strong> Click and drag to remove tiles.</li>
+                <li><strong>Fill Tool:</strong> Click to fill an area with the selected sprite.</li>
+                <li><strong>Text Tool:</strong> Click to add text to the canvas.</li>
+                <li><strong>Eyedropper Tool:</strong> Click to select a tile on the canvas.</li>
+                <li><strong>Zoom Tool:</strong> Click to zoom in, right-click to zoom out.</li>
+                <li><strong>Hand Tool:</strong> Click and drag to pan the canvas view.</li>
+                <li><strong>Torch Tool:</strong> Click to place a light source on the map.</li>
+                <li><strong>Dungeon Generator:</strong> Click to open the dungeon generation tool.</li>
+                <li><strong>Settings:</strong> Adjust grid size and other options.</li>
+            </ul>
+            <p>Load spritesheets for tiles, monsters, and assets. Manage layers and use various tools to create your tilemap. Don't forget to save your work!</p>
+        </div>
+        <div class="modal-footer">
+            <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+        // JavaScript code will be inserted here
+
+// Constants and global variables
+const TILE_SIZE = 32;
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 600;
+let canvas, ctx;
+let currentTool = 'brush';
+let currentLayer = 0;
+let layers = [];
+let fogLayer;
+let spritesheets = {
+    tiles: null,
+    monsters: null,
+    assets: null
+};
+let sprites = {
+    tiles: [],
+    monsters: [],
+    assets: []
+};
+//part 1 cont'
+let cameraX = 0, cameraY = 0;
+let isDragging = false;
+let lastMouseX, lastMouseY;
+let selectedTiles = [];
+let torches = [];
+let currentSprite = null;
+let currentSpriteType = 'tiles';
+
+// Dungeon generator variables
+let dungeonTiles = {
+    floor: null,
+    wall: null,
+    door: null,
+    corridor: null
+};
+
+// Utility function to check if the DOM is ready
+function domReady(fn) {
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+        setTimeout(fn, 1);
+    } else {
+        document.addEventListener("DOMContentLoaded", fn);
+    }
+}
+
+function initializeCanvas() {
+    console.log('Initializing canvas...');
+    canvas = document.getElementById('tileMapCanvas');
+    if (!canvas) {
+        console.error('Canvas element not found. Ensure there is an element with id "tileMapCanvas" in your HTML.');
+        return;
+    }
+    // Dynamically set canvas dimensions to fill parent container
+    canvas.width = canvas.parentElement.offsetWidth;
+    canvas.height = canvas.parentElement.offsetHeight;
+    
+    ctx = canvas.getContext('2d');
+    if (!ctx) {
+        console.error('Unable to get 2D context from canvas');
+        return;
+    }
+    console.log('Canvas initialized successfully');
+
+    // Add canvas-specific event listeners here
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('wheel', handleZoom);
+}
+
+
+function handleZoom(e) {
+    e.preventDefault();
+    const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+    const mousePos = getMousePos(canvas, e);
+    
+    cameraX = mousePos.x - (mousePos.x - cameraX) * zoom;
+    cameraY = mousePos.y - (mousePos.y - cameraY) * zoom;
+    
+    TILE_SIZE *= zoom;
+    
+    drawMap();
+}
+
+function initializeLayers() {
+    addLayer();
+    updateLayerList();
+}
+
+function initializeFogLayer() {
+    fogLayer = createEmptyLayer();
+    console.log('Fog layer initialized');
+}
+
+function createEmptyLayer() {
+    const layer = [];
+    const tilesX = Math.ceil(CANVAS_WIDTH / TILE_SIZE);
+    const tilesY = Math.ceil(CANVAS_HEIGHT / TILE_SIZE);
+    for (let y = 0; y < tilesY; y++) {
+        layer[y] = [];
+        for (let x = 0; x < tilesX; x++) {
+            layer[y][x] = null;
+        }
+    }
+    return layer;
+}
+
+function addLayer() {
+    const newLayer = createEmptyLayer();
+    layers.push(newLayer);
+    currentLayer = layers.length - 1;
+    updateLayerList();
+    console.log(`Added new layer. Total layers: ${layers.length}`);
+}
+
+function updateLayerList() {
+    console.log('Updating layer list');
+    const layerList = document.getElementById('layer-list');
+    if (!layerList) {
+        console.error('Layer list element not found');
+        return;
+    }
+    layerList.innerHTML = '';
+    layers.forEach((layer, index) => {
+        const layerItem = document.createElement('div');
+        layerItem.className = `layer-item ${index === currentLayer ? 'active' : ''}`;
+        layerItem.innerHTML = `
+            <span>Layer ${index + 1}</span>
+            <div>
+                <i class="material-icons tiny visibility-toggle">${layer.visible !== false ? 'visibility' : 'visibility_off'}</i>
+                <i class="material-icons tiny delete-layer">delete</i>
+            </div>
+        `;
+        layerItem.querySelector('.visibility-toggle').addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleLayerVisibility(index);
+        });
+        layerItem.querySelector('.delete-layer').addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteLayer(index);
+        });
+        layerItem.addEventListener('click', () => {
+            currentLayer = index;
+            updateLayerList();
+        });
+        layerList.appendChild(layerItem);
+    });
+}
+
+// function initializeEventListeners() {
+//     canvas.addEventListener('mousedown', handleMouseDown);
+//     canvas.addEventListener('mousemove', handleMouseMove);
+//     canvas.addEventListener('mouseup', handleMouseUp);
+//     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+//     document.getElementById('addLayer').addEventListener('click', () => {
+//         addLayer();
+//         updateUI();
+//     });
+
+//     document.getElementById('saveMap').addEventListener('click', saveMap);
+//     document.getElementById('loadMap').addEventListener('click', loadMap);
+
+//     document.querySelectorAll('#toolbox i').forEach(tool => {
+//         tool.addEventListener('click', (e) => {
+//             currentTool = e.target.getAttribute('data-tooltip').toLowerCase().replace(' tool', '');
+//             if (currentTool === 'dungeon generator') {
+//                 openDungeonGeneratorDialog();
+//             } else {
+//                 updateUI();
+//             }
+//         });
+//     });
+
+//     document.getElementById('loadTileSpritesheet').addEventListener('click', () => loadSpritesheet('tiles'));
+//     document.getElementById('loadMonsterSpritesheet').addEventListener('click', () => loadSpritesheet('monsters'));
+//     document.getElementById('loadAssetSpritesheet').addEventListener('click', () => loadSpritesheet('assets'));
+
+//     document.getElementById('previewTiles').addEventListener('click', () => previewSpritesheet('tiles'));
+//     document.getElementById('previewMonsters').addEventListener('click', () => previewSpritesheet('monsters'));
+//     document.getElementById('previewAssets').addEventListener('click', () => previewSpritesheet('assets'));
+
+//     document.getElementById('spritesheetOk').addEventListener('click', sliceSpritesheet);
+//     document.getElementById('generateDungeon').addEventListener('click', generateDungeon);
+
+//     // Add event listeners for dungeon tile selection
+//     ['floor', 'wall', 'door', 'corridor'].forEach(tileType => {
+//         document.getElementById(`${tileType}Tile`).addEventListener('click', () => selectDungeonTile(tileType));
+//     });
+// }
+
+function initializeEventListeners() {
+    document.getElementById('addLayer').addEventListener('click', () => {
+        addLayer();
+        updateUI();
+    });
+
+    document.getElementById('saveMap').addEventListener('click', saveMap);
+    document.getElementById('loadMap').addEventListener('click', loadMap);
+
+    document.querySelectorAll('#toolbox i').forEach(tool => {
+        tool.addEventListener('click', (e) => {
+            currentTool = e.target.getAttribute('data-tooltip').toLowerCase().replace(' tool', '');
+            if (currentTool === 'dungeon generator') {
+                openDungeonGeneratorDialog();
+            } else {
+                updateUI();
+            }
+        });
+    });
+
+    document.getElementById('loadTileSpritesheet').addEventListener('click', () => loadSpritesheet('tiles'));
+    document.getElementById('loadMonsterSpritesheet').addEventListener('click', () => loadSpritesheet('monsters'));
+    document.getElementById('loadAssetSpritesheet').addEventListener('click', () => loadSpritesheet('assets'));
+
+    document.getElementById('previewTiles').addEventListener('click', () => previewSpritesheet('tiles'));
+    document.getElementById('previewMonsters').addEventListener('click', () => previewSpritesheet('monsters'));
+    document.getElementById('previewAssets').addEventListener('click', () => previewSpritesheet('assets'));
+
+    document.getElementById('spritesheetOk').addEventListener('click', sliceSpritesheet);
+    document.getElementById('generateDungeon').addEventListener('click', generateDungeon);
+
+    // Add event listeners for dungeon tile selection
+    ['floor', 'wall', 'door', 'corridor'].forEach(tileType => {
+        document.getElementById(`${tileType}Tile`).addEventListener('click', () => selectDungeonTile(tileType));
+    });
+
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        switch(e.key) {
+            case 'b': currentTool = 'brush'; break;
+            case 'e': currentTool = 'eraser'; break;
+            case 'f': currentTool = 'fill'; break;
+            case 'm': currentTool = 'move'; break;
+            case 't': currentTool = 'torch'; break;
+            case 's': currentTool = 'select'; break;
+        }
+        updateToolSelection();
+    });
+
+    // Add event listener for canvas resize
+    window.addEventListener('resize', handleCanvasResize);
+}
+
+function handleCanvasResize() {
+    if (canvas) {
+        // Dynamically resize canvas to match the container
+        canvas.width = canvas.parentElement.offsetWidth;
+        canvas.height = canvas.parentElement.offsetHeight;
+        drawMap(); // Redraw the map after resizing
+        console.log('Canvas resized and map redrawn.');
+    }
+}
+
+
+function initializeMaterializeComponents() {
+    M.AutoInit(); // Initialize all Materialize components automatically
+    M.Tooltip.init(document.querySelectorAll('.tooltipped'), {enterDelay: 200}); // Ensure tooltips have a slight delay
+    M.Tabs.init(document.getElementById('spritesheet-tabs')); // Initialize tabs for spritesheets
+    console.log('Materialize components initialized.');
+}
+
+
+// Initialize the application
+domReady(function() {
+    console.log('DOM is ready, starting initialization...');
+    initializeCanvas();  // Initialize canvas size and event listeners
+    initializeLayers();   // Initialize layers for drawing
+    initializeFogLayer(); // Initialize the fog of war layer
+    initializeEventListeners(); // Add event listeners for user interaction
+    initializeMaterializeComponents(); // Initialize UI elements from Materialize CSS
+
+    // Ensure the canvas resizes when the window changes size
+    window.addEventListener('resize', handleCanvasResize);
+
+    updateUI(); // Update the interface to reflect current state
+    console.log('Initialization complete');
+});
+
+
+// part 2 of the javascript
+
+function drawMap() {
+    console.log('Drawing map');
+    if (!canvas || !ctx) {
+        console.error('Canvas or context not initialized');
+        return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    layers.forEach((layer, layerIndex) => {
+        if (layer.visible !== false) {
+            for (let y = 0; y < layer.length; y++) {
+                for (let x = 0; x < layer[y].length; x++) {
+                    const tile = layer[y][x];
+                    if (tile) {
+                        const sprite = sprites[tile.type][tile.index];
+                        if (sprite) {
+                            ctx.drawImage(
+                                sprite,
+                                x * TILE_SIZE - cameraX,
+                                y * TILE_SIZE - cameraY,
+                                TILE_SIZE,
+                                TILE_SIZE
+                            );
+                        } else {
+                            console.warn(`Sprite not found for tile at (${x}, ${y}) in layer ${layerIndex}`);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Draw fog of war
+    if (fogLayer) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        for (let y = 0; y < fogLayer.length; y++) {
+            for (let x = 0; x < fogLayer[y].length; x++) {
+                if (!fogLayer[y][x]) {
+                    ctx.fillRect(
+                        x * TILE_SIZE - cameraX,
+                        y * TILE_SIZE - cameraY,
+                        TILE_SIZE,
+                        TILE_SIZE
+                    );
+                }
+            }
+        }
+    }
+
+    // Draw torches
+    ctx.fillStyle = 'yellow';
+    torches.forEach(torch => {
+        ctx.beginPath();
+        ctx.arc(
+            torch.x * TILE_SIZE - cameraX + TILE_SIZE / 2,
+            torch.y * TILE_SIZE - cameraY + TILE_SIZE / 2,
+            5, 0, Math.PI * 2
+        );
+        ctx.fill();
+    });
+
+    // Draw selection rectangle if in marquee mode
+    if (currentTool === 'marquee' && selectedTiles.length > 0) {
+        ctx.strokeStyle = 'white';
+        ctx.strokeRect(
+            selectedTiles[0].x * TILE_SIZE - cameraX,
+            selectedTiles[0].y * TILE_SIZE - cameraY,
+            (selectedTiles[selectedTiles.length - 1].x - selectedTiles[0].x + 1) * TILE_SIZE,
+            (selectedTiles[selectedTiles.length - 1].y - selectedTiles[0].y + 1) * TILE_SIZE
+        );
+    }
+}
+
+function handleMouseDown(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left + cameraX) / TILE_SIZE);
+    const y = Math.floor((e.clientY - rect.top + cameraY) / TILE_SIZE);
+
+    switch (currentTool) {
+        case 'brush':
+            paintTile(x, y);
+            break;
+        case 'eraser':
+            eraseTile(x, y);
+            break;
+        case 'fill':
+            floodFill(x, y);
+            break;
+        case 'torch':
+            placeTorch(x, y);
+            break;
+        case 'marquee':
+            startSelection(x, y);
+            break;
+        case 'move':
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            break;
+    }
+}
+
+function handleMouseMove(e) {
+    if (isDragging && currentTool === 'move') {
+        const deltaX = e.clientX - lastMouseX;
+        const deltaY = e.clientY - lastMouseY;
+        cameraX -= deltaX;
+        cameraY -= deltaY;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        drawMap();
+    }
+}
+
+function handleMouseUp() {
+    isDragging = false;
+    if (currentTool === 'marquee') {
+        endSelection();
+    }
+}
+
+function paintTile(x, y) {
+    if (x >= 0 && x < layers[currentLayer].length && y >= 0 && y < layers[currentLayer][0].length && currentSprite) {
+        layers[currentLayer][y][x] = currentSprite;
+        drawMap();
+    }
+}
+
+function eraseTile(x, y) {
+    if (x >= 0 && x < layers[currentLayer].length && y >= 0 && y < layers[currentLayer][0].length) {
+        layers[currentLayer][y][x] = null;
+        drawMap();
+    }
+}
+
+function floodFill(x, y) {
+    const targetTile = layers[currentLayer][y][x];
+    const replacementTile = currentSprite;
+
+    function fill(x, y) {
+        if (x < 0 || x >= layers[currentLayer].length || y < 0 || y >= layers[currentLayer][0].length) {
+            return;
+        }
+        if (JSON.stringify(layers[currentLayer][y][x]) === JSON.stringify(targetTile)) {
+            layers[currentLayer][y][x] = replacementTile;
+            fill(x + 1, y);
+            fill(x - 1, y);
+            fill(x, y + 1);
+            fill(x, y - 1);
+        }
+    }
+
+    if (JSON.stringify(targetTile) !== JSON.stringify(replacementTile)) {
+        fill(x, y);
+        drawMap();
+    }
+}
+
+function placeTorch(x, y) {
+    torches.push({x, y});
+    updateFogOfWar();
+    drawMap();
+}
+
+function startSelection(x, y) {
+    selectedTiles = [{x, y}];
+}
+
+function endSelection() {
+    console.log('Selected tiles:', selectedTiles);
+}
+
+function updateFogOfWar() {
+    fogLayer = createEmptyLayer();
+    torches.forEach(torch => {
+        revealArea(torch.x, torch.y, 10);
+    });
+}
+
+function revealArea(centerX, centerY, radius) {
+    for (let y = centerY - radius; y <= centerY + radius; y++) {
+        for (let x = centerX - radius; x <= centerX + radius; x++) {
+            if (x >= 0 && x < fogLayer.length && y >= 0 && y < fogLayer[0].length) {
+                const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+                if (distance <= radius) {
+                    if (hasLineOfSight(centerX, centerY, x, y)) {
+                        fogLayer[y][x] = 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+function hasLineOfSight(x1, y1, x2, y2) {
+    const dx = Math.abs(x2 - x1);
+    const dy = Math.abs(y2 - y1);
+    const sx = (x1 < x2) ? 1 : -1;
+    const sy = (y1 < y2) ? 1 : -1;
+    let err = dx - dy;
+
+    while (true) {
+        if (x1 === x2 && y1 === y2) break;
+        if (isTileBlockingLight(x1, y1)) return false;
+
+        const e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x1 += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y1 += sy;
+        }
+    }
+    return true;
+}
+
+function isTileBlockingLight(x, y) {
+    return layers.some(layer => {
+        const tile = layer[y] && layer[y][x];
+        return tile && tile.blocksLight;
+    });
+}
+
+function updateUI() {
+    console.log('Updating UI');
+    updateLayerList();
+    updateToolSelection();
+    drawMap();
+}
+
+function updateToolSelection() {
+    console.log('Updating tool selection');
+    document.querySelectorAll('#toolbox i').forEach(tool => {
+        tool.classList.remove('active');
+        if (tool.getAttribute('data-tooltip').toLowerCase().replace(' tool', '') === currentTool) {
+            tool.classList.add('active');
+        }
+    });
+}
+
+//part 3 ' spritesheets'
+
+function loadSpritesheet(type) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+            console.error('No file selected.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = function() {
+                spritesheets[type] = img;
+                openSpritesheetDialog(type);  // Only open the dialog after the image is loaded
+                console.log('Image loaded successfully.');
+            };
+            img.onerror = function() {
+                console.error('Failed to load image. Please ensure it is a valid image file.');
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
+
+
+
+
+
+function openSpritesheetDialog(type) {
+    const modal = M.Modal.getInstance(document.getElementById('spritesheet-dialog'));
+    modal.open();
+
+    const canvas = document.getElementById('spritesheet-canvas');
+    const ctx = canvas.getContext('2d');
+    const img = spritesheets[type];
+
+    // Ensure that the image is valid
+    if (!img) {
+        console.error('No image loaded for this spritesheet type.');
+        return;
+    }
+
+    // Reset the image load flag
+    isImageLoaded = false;
+
+    // Only proceed after the image has fully loaded
+    img.onload = function() {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);  // Safely draw the image after it has fully loaded
+
+        // Set the flag to indicate that the image is loaded and ready
+        isImageLoaded = true;
+        drawSpritesheetGrid();  // Now, safely draw the grid
+        console.log('Image loaded and grid drawn successfully.');
+    };
+
+    // If the image is cached and already loaded, call `onload` directly
+    if (img.complete) {
+        img.onload();  // Manually trigger `onload` if the image is cached
+    }
+
+    // Set the current spritesheet type
+    canvas.dataset.type = type;
+
+    // Add event listeners for grid changes
+    document.getElementById('spriteWidth').addEventListener('input', drawSpritesheetGrid);
+    document.getElementById('spriteHeight').addEventListener('input', drawSpritesheetGrid);
+    document.getElementById('gridOffsetX').addEventListener('input', drawSpritesheetGrid);
+    document.getElementById('gridOffsetY').addEventListener('input', drawSpritesheetGrid);
+    document.getElementById('spritesheetScale').addEventListener('input', drawSpritesheetGrid);
+}
+
+
+
+
+let isImageLoaded = false; // New flag to track image loading state
+
+function drawSpritesheetGrid() {
+    const canvas = document.getElementById('spritesheet-canvas');
+    const ctx = canvas.getContext('2d');
+    const type = canvas.dataset.type;
+    const img = spritesheets[type];
+
+    if (!img || !isImageLoaded) {
+        console.error('Image not loaded or invalid. Cannot draw grid.');
+        return;  // Exit if the image isn't fully loaded
+    }
+
+    const width = parseInt(document.getElementById('spriteWidth').value);
+    const height = parseInt(document.getElementById('spriteHeight').value);
+    const offsetX = parseInt(document.getElementById('gridOffsetX').value);
+    const offsetY = parseInt(document.getElementById('gridOffsetY').value);
+    const scale = parseFloat(document.getElementById('spritesheetScale').value);
+
+    // Clear the canvas and redraw the image
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);  // Safely draw the image after it's fully loaded
+
+    // Draw the grid over the image
+    ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+    ctx.lineWidth = 1;
+
+    for (let x = offsetX; x < canvas.width; x += width) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+
+    for (let y = offsetY; y < canvas.height; y += height) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+
+    console.log('Grid drawn successfully.');
+}
+
+
+
+
+
+function sliceSpritesheet() {
+    console.log('Slicing spritesheet...');
+    const canvas = document.getElementById('spritesheet-canvas');
+    const type = canvas.dataset.type;
+    const img = spritesheets[type];
+    const width = parseInt(document.getElementById('spriteWidth').value);
+    const height = parseInt(document.getElementById('spriteHeight').value);
+    const offsetX = parseInt(document.getElementById('gridOffsetX').value);
+    const offsetY = parseInt(document.getElementById('gridOffsetY').value);
+
+    sprites[type] = [];
+
+    for (let y = offsetY; y < img.height; y += height) {
+        for (let x = offsetX; x < img.width; x += width) {
+            const spriteCanvas = document.createElement('canvas');
+            spriteCanvas.width = width;
+            spriteCanvas.height = height;
+            const spriteCtx = spriteCanvas.getContext('2d');
+            spriteCtx.drawImage(img, x, y, width, height, 0, 0, width, height);
+            sprites[type].push(spriteCanvas);
+        }
+    }
+
+    console.log(`Sliced ${sprites[type].length} sprites for ${type}`);
+    updateSpriteGrid(type);
+    M.Modal.getInstance(document.getElementById('spritesheet-dialog')).close();
+}
+
+function updateSpriteGrid(type) {
+    console.log(`Updating sprite grid for ${type}`);
+    const grid = document.getElementById(`${type}-sprite-grid`);
+    if (!grid) {
+        console.error(`Sprite grid not found for type: ${type}`);
+        return;
+    }
+    grid.innerHTML = '';
+    sprites[type].forEach((sprite, index) => {
+        const item = document.createElement('div');
+        item.className = 'sprite-item';
+        item.dataset.index = index;
+        item.style.backgroundImage = `url(${sprite.toDataURL()})`;
+        item.style.backgroundSize = 'cover';
+        grid.appendChild(item);
+    });
+}
+
+function previewSpritesheet(type) {
+    if (spritesheets[type]) {
+        const preview = document.getElementById(`${type}-spritesheet-preview`);
+        preview.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = spritesheets[type].src;
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        preview.appendChild(img);
+    } else {
+        M.toast({html: 'No spritesheet loaded for this type'});
+    }
+}
+
+function selectSprite(type, index) {
+    currentSprite = { type, index };
+    currentSpriteType = type;
+    document.querySelectorAll('.sprite-item').forEach(item => item.classList.remove('selected'));
+    document.querySelector(`#${type}-sprite-grid .sprite-item[data-index="${index}"]`).classList.add('selected');
+}
+
+//part 4 ' dungeon'
+
+function openDungeonGeneratorDialog() {
+    const modal = M.Modal.getInstance(document.getElementById('dungeon-generator-dialog'));
+    modal.open();
+}
+
+function selectDungeonTile(tileType) {
+    if (currentSprite) {
+        dungeonTiles[tileType] = currentSprite;
+        document.getElementById(`${tileType}Tile`).style.backgroundImage = `url(${sprites[currentSprite.type][currentSprite.index].toDataURL()})`;
+    } else {
+        M.toast({html: 'Please select a sprite first'});
+    }
+}
+
+function generateDungeon() {
+    const width = parseInt(document.getElementById('dungeonWidth').value);
+    const height = parseInt(document.getElementById('dungeonHeight').value);
+    const numRooms = parseInt(document.getElementById('numRooms').value);
+
+    if (!dungeonTiles.floor || !dungeonTiles.wall || !dungeonTiles.door || !dungeonTiles.corridor) {
+        M.toast({html: 'Please select all dungeon tiles'});
+        return;
+    }
+
+    const dungeon = createEmptyDungeon(width, height);
+    const rooms = generateRooms(dungeon, numRooms);
+    connectRooms(dungeon, rooms);
+    placeDoors(dungeon, rooms);
+
+    // Create a new layer for the dungeon
+    const dungeonLayer = createEmptyLayer();
+    layers.push(dungeonLayer);
+    currentLayer = layers.length - 1;
+
+    // Place the dungeon tiles on the new layer
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const tile = dungeon[y][x];
+            switch (tile) {
+                case 'F': dungeonLayer[y][x] = dungeonTiles.floor; break;
+                case 'W': dungeonLayer[y][x] = dungeonTiles.wall; break;
+                case 'D': dungeonLayer[y][x] = dungeonTiles.door; break;
+                case 'C': dungeonLayer[y][x] = dungeonTiles.corridor; break;
+            }
+        }
+    }
+
+    updateLayerList();
+    drawMap();
+    M.Modal.getInstance(document.getElementById('dungeon-generator-dialog')).close();
+}
+
+function createEmptyDungeon(width, height) {
+    const dungeon = [];
+    for (let y = 0; y < height; y++) {
+        dungeon[y] = [];
+        for (let x = 0; x < width; x++) {
+            dungeon[y][x] = 'W'; // Wall
+        }
+    }
+    return dungeon;
+}
+
+function generateRooms(dungeon, numRooms) {
+    const rooms = [];
+    const minRoomSize = 3;
+    const maxRoomSize = 8;
+
+    for (let i = 0; i < numRooms; i++) {
+        const roomWidth = Math.floor(Math.random() * (maxRoomSize - minRoomSize + 1)) + minRoomSize;
+        const roomHeight = Math.floor(Math.random() * (maxRoomSize - minRoomSize + 1)) + minRoomSize;
+        const x = Math.floor(Math.random() * (dungeon[0].length - roomWidth - 1)) + 1;
+        const y = Math.floor(Math.random() * (dungeon.length - roomHeight - 1)) + 1;
+
+        const room = { x, y, width: roomWidth, height: roomHeight };
+
+        if (!rooms.some(r => roomsOverlap(r, room))) {
+            rooms.push(room);
+            for (let ry = y; ry < y + roomHeight; ry++) {
+                for (let rx = x; rx < x + roomWidth; rx++) {
+                    dungeon[ry][rx] = 'F'; // Floor
+                }
+            }
+        }
+    }
+
+    return rooms;
+}
+
+function roomsOverlap(room1, room2) {
+    return !(room1.x + room1.width < room2.x ||
+             room2.x + room2.width < room1.x ||
+             room1.y + room1.height < room2.y ||
+             room2.y + room2.height < room1.y);
+}
+
+function connectRooms(dungeon, rooms) {
+    for (let i = 0; i < rooms.length - 1; i++) {
+        const room1 = rooms[i];
+        const room2 = rooms[i + 1];
+        const start = {
+            x: Math.floor(room1.x + room1.width / 2),
+            y: Math.floor(room1.y + room1.height / 2)
+        };
+        const end = {
+            x: Math.floor(room2.x + room2.width / 2),
+            y: Math.floor(room2.y + room2.height / 2)
+        };
+
+        drawCorridor(dungeon, start, end);
+    }
+}
+
+function drawCorridor(dungeon, start, end) {
+    let x = start.x;
+    let y = start.y;
+
+    while (x !== end.x || y !== end.y) {
+        if (dungeon[y][x] === 'W') {
+            dungeon[y][x] = 'C'; // Corridor
+        }
+
+        if (x < end.x) x++;
+        else if (x > end.x) x--;
+        else if (y < end.y) y++;
+        else if (y > end.y) y--;
+    }
+}
+
+function placeDoors(dungeon, rooms) {
+    rooms.forEach(room => {
+        const sides = [
+            { x: room.x, y: Math.floor(room.y + room.height / 2) },
+            { x: room.x + room.width - 1, y: Math.floor(room.y + room.height / 2) },
+            { x: Math.floor(room.x + room.width / 2), y: room.y },
+            { x: Math.floor(room.x + room.width / 2), y: room.y + room.height - 1 }
+        ];
+
+        sides.forEach(side => {
+            if (isDoorCandidate(dungeon, side.x, side.y)) {
+                dungeon[side.y][side.x] = 'D'; // Door
+            }
+        });
+    });
+}
+
+function isDoorCandidate(dungeon, x, y) {
+    return (dungeon[y][x] === 'W' &&
+            ((dungeon[y-1][x] === 'F' && dungeon[y+1][x] === 'C') ||
+             (dungeon[y-1][x] === 'C' && dungeon[y+1][x] === 'F') ||
+             (dungeon[y][x-1] === 'F' && dungeon[y][x+1] === 'C') ||
+             (dungeon[y][x-1] === 'C' && dungeon[y][x+1] === 'F')));
+}
+
+function saveMap() {
+    const mapData = {
+        layers: layers,
+        torches: torches,
+        spritesheets: Object.keys(spritesheets).reduce((acc, key) => {
+            acc[key] = spritesheets[key] ? spritesheets[key].src : null;
+            return acc;
+        }, {})
+    };
+    const blob = new Blob([JSON.stringify(mapData)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tilemap.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function loadMap() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = (event) => {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const mapData = JSON.parse(e.target.result);
+            layers = mapData.layers;
+            torches = mapData.torches;
+            Object.keys(mapData.spritesheets).forEach(key => {
+                if (mapData.spritesheets[key]) {
+                    const img = new Image();
+                    img.onload = () => {
+                        spritesheets[key] = img;
+                        updateSpriteGrid(key);
+                    };
+                    img.src = mapData.spritesheets[key];
+                }
+            });
+            currentLayer = 0;
+            updateLayerList();
+            drawMap();
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+// Add keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    switch(e.key) {
+        case 'b': currentTool = 'brush'; break;
+        case 'e': currentTool = 'eraser'; break;
+        case 'f': currentTool = 'fill'; break;
+        case 'm': currentTool = 'move'; break;
+        case 't': currentTool = 'torch'; break;
+        case 's': currentTool = 'select'; break;
+    }
+    updateToolSelection();
+});
+
+// // Add zoom functionality
+// canvas.addEventListener('wheel', (e) => {
+//     e.preventDefault();
+//     const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+//     const mousePos = getMousePos(canvas, e);
+    
+//     cameraX = mousePos.x - (mousePos.x - cameraX) * zoom;
+//     cameraY = mousePos.y - (mousePos.y - cameraY) * zoom;
+    
+//     TILE_SIZE *= zoom;
+    
+//     drawMap();
+// });
+
+// Utility function to get mouse position relative to canvas
+function getMousePos(canvas, evt) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: evt.clientX - rect.left,
+        y: evt.clientY - rect.top
+    };
+}
+
+// Utility function to get tile coordinates from mouse position
+function getTileCoords(mousePos) {
+    return {
+        x: Math.floor((mousePos.x + cameraX) / TILE_SIZE),
+        y: Math.floor((mousePos.y + cameraY) / TILE_SIZE)
+    };
+}
+
+// Add event listener for canvas resize
+window.addEventListener('resize', () => {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    drawMap();
+});
+
+
+    </script>
+</body>
+</html>
